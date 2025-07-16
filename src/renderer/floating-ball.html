@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Floating Ball</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: transparent;
+      overflow: hidden; /* 强制隐藏滚动条 */
+    }
+
+    /* 全局隐藏滚动条 */
+    ::-webkit-scrollbar {
+      display: none !important;
+      width: 0 !important;
+      height: 0 !important;
+    }
+
+    /* 兼容其他浏览器 */
+    * {
+      scrollbar-width: none; /* Firefox */
+      -ms-overflow-style: none; /* IE 10+ */
+    }
+
+    /* 强制隐藏所有可能的滚动条 */
+    body::-webkit-scrollbar,
+    html::-webkit-scrollbar,
+    div::-webkit-scrollbar {
+      display: none !important;
+    }
+
+    /* 确保整个页面不会滚动 */
+    html {
+      overflow: hidden;
+      position: fixed;
+      width: 100%;
+      height: 100%;
+    }
+
+    .floating-ball-container {
+      width: 100%;
+      height: 100%;
+      position: fixed;
+      top: 0;
+      left: 0;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      overflow: hidden; /* 确保容器不会产生滚动条 */
+      -webkit-app-region: no-drag;
+      padding-right: 10px;
+    }
+
+    .floating-ball {
+      width: 60px;
+      height: 60px;
+      background: radial-gradient(circle, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.7) 30%, #5389BA 100%);
+      border: none;
+      cursor: move;
+      position: relative;
+      transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+      overflow: hidden; /* 确保悬浮球内部不会有滚动条 */
+      -webkit-app-region: no-drag;
+      filter: drop-shadow(0 6px 20px rgba(83, 137, 186, 0.3));
+      outline: none;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.4);
+      flex-shrink: 0; /* 防止缩放导致的布局问题 */
+      min-width: 60px; /* 确保最小宽度 */
+      min-height: 60px; /* 确保最小高度 */
+      max-width: 60px; /* 确保最大宽度 */
+      max-height: 60px; /* 确保最大高度 */
+    }
+
+    /* 悬浮球内部光泽效果 */
+    .floating-ball::before {
+      content: '';
+      position: absolute;
+      top: 15%;
+      left: 15%;
+      width: 40%;
+      height: 40%;
+      background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.4) 0%, transparent 60%);
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
+    /* 添加外部触碰检测区域 */
+    .floating-ball::after {
+      content: '';
+      position: absolute;
+      top: -15px;
+      left: -15px;
+      right: -15px;
+      bottom: -15px;
+      background: transparent;
+      border-radius: 50%;
+      pointer-events: auto;
+      box-shadow: none;
+    }
+
+    .floating-ball:hover {
+      transform: scale(1.05);
+      cursor: pointer;
+      filter: drop-shadow(0 8px 25px rgba(83, 137, 186, 0.5));
+      background: radial-gradient(circle, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 0.8) 25%, #5389BA 100%);
+    }
+
+    .floating-ball:active {
+      transform: scale(0.95);
+    }
+
+    /* 移除点击波纹动画 */
+    .floating-ball.click-ripple::after {
+      display: none;
+    }
+
+    /* 手势效果 - 悬停呼吸动画 */
+    .floating-ball.breathing {
+      animation: breathing 2s ease-in-out infinite;
+    }
+
+    /* 手势效果 - 成功反馈动画 */
+    .floating-ball.success-feedback {
+      animation: successPulse 0.8s ease-out;
+    }
+
+    .ball-icon {
+      pointer-events: none;
+      z-index: 3;
+      position: relative;
+      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* 时间显示在悬浮球内部 */
+    .floating-ball-time {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-size: 10px;
+      font-weight: 600;
+      font-family: 'Courier New', monospace;
+      letter-spacing: 0.2px;
+      text-align: center;
+      line-height: 1.1;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+      white-space: nowrap;
+      display: none;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    /* 录音时显示时间，隐藏图标 */
+    .floating-ball.recording .floating-ball-time {
+      display: block;
+    }
+
+    .floating-ball.recording .ball-icon {
+      display: none;
+    }
+
+    /* 暂停时也显示时间 */
+    .floating-ball.paused .floating-ball-time {
+      display: block;
+    }
+
+    .floating-ball.paused .ball-icon {
+      display: none;
+    }
+
+
+
+    .hidden-mode .robot-icon {
+      width: 40px !important;
+      height: 40px !important;
+      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4)) !important;
+    }
+
+    .hidden-mode {
+      opacity: 0.7 !important;
+      transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+    }
+
+    .hidden-mode.left-edge {
+      transform: translateX(-25px) !important;
+    }
+
+    .hidden-mode.right-edge {
+      transform: translateX(25px) !important;
+    }
+
+    .floating-ball.show-full {
+      opacity: 1 !important;
+      transform: translateX(0) !important;
+    }
+
+    /* 动画效果 */
+    @keyframes pulse {
+      0% { 
+        transform: scale(1);
+        box-shadow: none;
+      }
+    }
+
+    /* 呼吸动画 */
+    @keyframes breathing {
+      0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+      }
+      50% {
+        transform: scale(1.05);
+        opacity: 0.8;
+      }
+    }
+
+    /* 成功反馈动画 */
+    @keyframes successPulse {
+      0% {
+        transform: scale(1);
+        box-shadow: none;
+      }
+      30% {
+        transform: scale(1.2);
+        box-shadow: none;
+      }
+      100% {
+        transform: scale(1);
+        box-shadow: none;
+      }
+      50% { 
+        transform: scale(1.15);
+        box-shadow: none;
+      }
+      100% { 
+        transform: scale(1);
+        box-shadow: none;
+      }
+    }
+
+    .pulse {
+      animation: pulse 0.8s ease-in-out;
+    }
+
+    @keyframes bounce {
+      0%, 20%, 50%, 80%, 100% { transform: translateY(0) scale(1); }
+      40% { transform: translateY(-8px) scale(1.05); }
+      60% { transform: translateY(-4px) scale(1.02); }
+    }
+
+    .bounce {
+      animation: bounce 1.2s ease-in-out;
+    }
+
+    @keyframes shimmer {
+      0% { background-position: -200px 0; }
+      100% { background-position: 200px 0; }
+    }
+
+    .floating-ball:hover::before {
+      background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.6) 0%, transparent 60%);
+    }
+
+    /* 录音时悬浮球保持原样式，不改变背景色 */
+    .floating-ball.recording {
+      /* 保持原有样式，不改变背景色 */
+    }
+
+    @keyframes fadeInUp {
+      0% {
+        opacity: 0;
+        transform: translateY(10px) scale(0.9);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    /* 通知样式 */
+    .notification {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(135deg, rgba(76, 175, 80, 0.95), rgba(67, 160, 71, 0.95));
+      color: white;
+      padding: 12px 16px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-family: 'Microsoft YaHei', sans-serif;
+      word-wrap: break-word;
+      z-index: 9999;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(76, 175, 80, 0.4);
+      animation: scaleIn 0.3s ease-out, fadeOut 0.3s ease-in 3s forwards;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      line-height: 1.4;
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      overflow: hidden; /* 确保通知不会产生滚动条 */
+    }
+
+    .notification.success {
+      background: linear-gradient(135deg, rgba(76, 175, 80, 0.95), rgba(67, 160, 71, 0.95));
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(76, 175, 80, 0.4);
+    }
+
+    .notification.error {
+      background: linear-gradient(135deg, rgba(244, 67, 54, 0.95), rgba(229, 57, 53, 0.95));
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(244, 67, 54, 0.4);
+    }
+
+    .notification.info {
+      background: linear-gradient(135deg, rgba(33, 150, 243, 0.95), rgba(30, 136, 229, 0.95));
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(33, 150, 243, 0.4);
+    }
+
+    @keyframes scaleIn {
+      0% {
+        opacity: 0;
+        transform: scale(0.8);
+      }
+      100% {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    @keyframes fadeOut {
+      0% {
+        opacity: 1;
+        transform: scale(1);
+      }
+      100% {
+        opacity: 0;
+        transform: scale(0.9);
+      }
+    }
+
+    /* 录音控制面板样式 - 现代化设计 */
+    .recording-panel {
+      position: fixed;
+      top: 50%;
+      transform: translateY(-50%);
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.85) 100%);
+      border-radius: 35px;
+      padding: 6px 8px;
+      display: none;
+      flex-direction: row;
+      gap: 6px;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 
+        0 10px 25px rgba(0, 0, 0, 0.1),
+        0 4px 10px rgba(0, 0, 0, 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.6);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.7);
+      width: auto;
+      height: 50px;
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 1000;
+      overflow: hidden; /* 确保面板不会产生滚动条 */
+      flex-shrink: 0; /* 防止缩放 */
+      white-space: nowrap; /* 防止内容换行 */
+    }
+    
+    .recording-panel.left {
+      right: 65px;
+      left: auto;
+      animation: slideInLeft 0.4s ease-out;
+    }
+    
+    .recording-panel.right {
+      left: 65px;
+      right: auto;
+      animation: slideInRight 0.4s ease-out;
+    }
+
+    .recording-panel.show {
+      display: flex;
+    }
+
+    @keyframes slideInLeft {
+      0% {
+        opacity: 0;
+        transform: translateY(-50%) translateX(30px) scale(0.8);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(-50%) translateX(0) scale(1);
+      }
+    }
+    
+    @keyframes slideInRight {
+      0% {
+        opacity: 0;
+        transform: translateY(-50%) translateX(-30px) scale(0.8);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(-50%) translateX(0) scale(1);
+      }
+    }
+
+    .recording-btn {
+      background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      cursor: pointer;
+      padding: 0;
+      border-radius: 50%;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      color: #495057;
+      font-size: 16px;
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      box-shadow: 
+        0 3px 10px rgba(0, 0, 0, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.6);
+      overflow: hidden; /* 确保按钮不会产生滚动条 */
+      flex-shrink: 0; /* 防止缩放 */
+    }
+
+    .recording-btn:hover {
+      transform: scale(1.05) translateY(-1px);
+      box-shadow: 
+        0 5px 15px rgba(0, 0, 0, 0.15),
+        inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    }
+
+    .recording-btn:active {
+      transform: scale(0.95) translateY(0);
+      box-shadow: 
+        0 2px 10px rgba(0, 0, 0, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.6);
+    }
+
+    /* 开始/暂停按钮样式 */
+    .recording-btn.pause {
+      background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+      color: white;
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+    
+    .recording-btn.pause:hover {
+      background: linear-gradient(135deg, #34ce57 0%, #2dd4aa 100%);
+      box-shadow: 
+        0 8px 25px rgba(40, 167, 69, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    }
+    
+    .recording-btn.pause.is-recording {
+      background: linear-gradient(135deg, #fd7e14 0%, #e85d04 100%);
+      animation: recordingPulse 2s ease-in-out infinite;
+    }
+    
+    .recording-btn.pause.is-recording:hover {
+      background: linear-gradient(135deg, #ff8500 0%, #fd7e14 100%);
+      box-shadow: 
+        0 8px 25px rgba(253, 126, 20, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    }
+
+    @keyframes recordingPulse {
+      0%, 100% {
+        box-shadow: 
+          0 4px 15px rgba(0, 0, 0, 0.1),
+          0 0 0 0 rgba(253, 126, 20, 0.7),
+          inset 0 1px 0 rgba(255, 255, 255, 0.6);
+      }
+      50% {
+        box-shadow: 
+          0 4px 15px rgba(0, 0, 0, 0.1),
+          0 0 0 10px rgba(253, 126, 20, 0),
+          inset 0 1px 0 rgba(255, 255, 255, 0.6);
+      }
+    }
+
+    /* 停止按钮样式 */
+    .recording-btn.stop {
+      background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+      color: white;
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+
+    .recording-btn.stop:hover {
+      background: linear-gradient(135deg, #e4606d 0%, #dc3545 100%);
+      box-shadow: 
+        0 8px 25px rgba(220, 53, 69, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    }
+    
+    /* 主页按钮样式 */
+    .recording-btn.home {
+      background: linear-gradient(135deg, #5389BA 0%, #4a7ba7 100%);
+      color: white;
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+    
+    .recording-btn.home:hover {
+      background: linear-gradient(135deg, #6ba3d6 0%, #5a8bc4 100%);
+      box-shadow: 
+        0 8px 25px rgba(83, 137, 186, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    }
+
+
+  </style>
+</head>
+<body>
+  <div class="floating-ball-container">
+         <!-- 录音控制面板 -->
+     <div class="recording-panel" id="recordingPanel">
+       <button class="recording-btn pause" id="pauseBtn" title="开始录音">
+         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+           <path d="M8 5v14l11-7z"/>
+         </svg>
+       </button>
+       <button class="recording-btn stop" id="stopBtn" title="停止录音">
+         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+           <rect x="6" y="6" width="12" height="12" rx="1"/>
+         </svg>
+       </button>
+       <button class="recording-btn home" id="homeBtn" title="显示主窗口">
+         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+           <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
+         </svg>
+       </button>
+     </div>
+
+    
+         <!-- 悬浮球 -->
+     <div class="floating-ball" id="floatingBall">
+       <div class="floating-ball-time" id="floatingBallTime">00:00:00</div>
+       <div class="ball-icon">
+         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: white;">
+           <path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path>
+           <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+           <line x1="12" y1="19" x2="12" y2="23"></line>
+           <line x1="8" y1="23" x2="16" y2="23"></line>
+         </svg>
+       </div>
+     </div>
+  </div>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+    const ball = document.getElementById('floatingBall');
+    const ballContainer = document.querySelector('.floating-ball-container');
+    const recordingPanel = document.getElementById('recordingPanel');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const homeBtn = document.getElementById('homeBtn');
+    const floatingBallTime = document.getElementById('floatingBallTime');
+    
+    let isDragging = false;
+    let dragStartTime = 0;
+    let startX = 0;
+    let startY = 0;
+    let hasMoved = false;
+    
+    // 录音状态
+    let isRecording = false;
+    let isPaused = false;
+    let recordingStartTime = 0;
+    let pausedTime = 0; // 累计暂停时间
+    let pauseStartTime = 0; // 暂停开始时间
+    let recordingTimer = null;
+    let panelHideTimer = null;
+    
+    // 屏幕位置状态
+    let screenPosition = 'right'; // 'left' 或 'right'
+
+    // 初始化屏幕位置检测
+    function initScreenPositionDetection() {
+      // 监听来自主进程的位置更新
+      ipcRenderer.on('window-position-update', (event, position) => {
+        updateScreenPosition(position);
+      });
+      
+      // 请求当前位置
+      ipcRenderer.send('request-window-position');
+    }
+
+    // 更新屏幕位置
+    function updateScreenPosition(position) {
+      const screenWidth = position.screenWidth;
+      const windowCenterX = position.x + (position.width / 2);
+      
+      // 判断窗口中心是在屏幕左半边还是右半边
+      if (windowCenterX < screenWidth / 2) {
+        screenPosition = 'left';
+      } else {
+        screenPosition = 'right';
+      }
+      
+      console.log('Screen position updated:', screenPosition, { position, screenWidth, windowCenterX });
+    }
+
+    // 鼠标按下事件 - 开始拖拽检测
+    ball.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      isDragging = true;
+      hasMoved = false;
+      dragStartTime = Date.now();
+      startX = e.clientX;
+      startY = e.clientY;
+      
+      console.log('Mouse down - start drag detection');
+      
+      // 禁用过渡动画，使拖拽更流畅
+      ball.style.transition = 'none';
+      
+      // 添加全局鼠标事件监听
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    });
+
+    // 鼠标移动事件 - 拖拽窗口
+    function onMouseMove(e) {
+      if (!isDragging) return;
+      
+      const deltaX = e.clientX - startX;
+      const deltaY = e.clientY - startY;
+      const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+      
+      // 如果移动距离超过5像素，认为是拖拽
+      if (distance > 5) {
+        hasMoved = true;
+        
+        // 通过IPC发送新的鼠标位置给主进程
+        ipcRenderer.send('drag-window', { 
+          mouseX: e.screenX, 
+          mouseY: e.screenY,
+          offsetX: startX,
+          offsetY: startY
+        });
+      }
+    }
+
+    // 鼠标释放事件 - 结束拖拽
+    function onMouseUp(e) {
+      console.log('Mouse up - end drag, hasMoved:', hasMoved);
+      
+      // 移除全局事件监听
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      
+      // 恢复过渡动画
+      ball.style.transition = 'all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1)';
+      
+      if (hasMoved) {
+        // 如果进行了拖拽，发送拖拽结束消息
+        console.log('Drag ended - sending snap message');
+        ipcRenderer.send('drag-end');
+        
+        // 添加贴边动画
+        setTimeout(() => {
+          ball.classList.add('bounce');
+          setTimeout(() => ball.classList.remove('bounce'), 1000);
+        }, 100);
+      } else {
+        // 如果没有拖拽，执行点击事件
+        console.log('Click detected');
+        
+        // 添加点击反馈动画
+        ball.classList.add('success-feedback');
+        setTimeout(() => ball.classList.remove('success-feedback'), 800);
+      }
+      
+      // 重置拖拽状态
+      isDragging = false;
+      hasMoved = false;
+      dragStartTime = 0;
+    }
+
+    // 右键菜单 - 使用原生菜单
+    ball.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      
+      // 发送右键菜单事件给主进程
+      ipcRenderer.send('show-context-menu');
+    });
+
+    // 确保悬浮球始终显示为完整状态
+    function ensureFullDisplay() {
+      ball.classList.remove('hidden-mode', 'left-edge', 'right-edge');
+      ball.classList.add('show-full');
+    }
+
+    // 初始化时确保完整显示
+    ensureFullDisplay();
+
+    // 添加悬停呼吸效果
+    ball.addEventListener('mouseenter', () => {
+      ball.classList.add('breathing');
+      // 鼠标悬停时显示录音面板
+      showRecordingPanel();
+    });
+
+    ball.addEventListener('mouseleave', () => {
+      ball.classList.remove('breathing');
+      // 只有在既没有录音也没有暂停的情况下才延迟隐藏面板
+      if (!isRecording && !isPaused) {
+        startPanelHideTimer();
+      }
+    });
+    
+    // 录音面板的鼠标事件
+    recordingPanel.addEventListener('mouseenter', () => {
+      clearTimeout(panelHideTimer);
+    });
+    
+    recordingPanel.addEventListener('mouseleave', () => {
+      // 只有在既没有录音也没有暂停的情况下才隐藏面板
+      if (!isRecording && !isPaused) {
+        startPanelHideTimer();
+      }
+    });
+    
+    // 显示录音面板
+    async function showRecordingPanel() {
+      clearTimeout(panelHideTimer);
+      
+      // 根据屏幕位置决定面板显示方向
+      recordingPanel.classList.remove('left', 'right');
+      if (screenPosition === 'left') {
+        // 悬浮球在屏幕左边，面板显示在右边
+        recordingPanel.classList.add('right');
+      } else {
+        // 悬浮球在屏幕右边，面板显示在左边
+        recordingPanel.classList.add('left');
+      }
+      
+      recordingPanel.classList.add('show');
+    }
+    
+    // 隐藏录音面板
+    function hideRecordingPanel() {
+      recordingPanel.classList.remove('show');
+    }
+    
+    // 开始隐藏计时器
+    function startPanelHideTimer() {
+      panelHideTimer = setTimeout(() => {
+        hideRecordingPanel();
+      }, 800);
+    }
+    
+    // 录音控制按钮事件
+    pauseBtn.addEventListener('click', () => {
+      if (!isRecording && !isPaused) {
+        // 如果还没开始录音，开始录音
+        startRecording();
+      } else if (isRecording) {
+        // 如果正在录音，暂停
+        pauseRecording();
+      } else if (isPaused) {
+        // 如果已暂停，继续
+        continueRecording();
+      }
+    });
+    
+    stopBtn.addEventListener('click', () => {
+      stopRecording();
+    });
+    
+    homeBtn.addEventListener('click', () => {
+      ipcRenderer.send('show-main-window');
+    });
+    
+    // 开始录音
+    function startRecording() {
+      isRecording = true;
+      isPaused = false;
+      recordingStartTime = Date.now();
+      pausedTime = 0; // 重置累计暂停时间
+      pauseStartTime = 0; // 重置暂停开始时间
+      
+      // 显示录音面板
+      showRecordingPanel();
+      
+      // 更新UI - 播放按钮变为暂停图标
+      pauseBtn.innerHTML = `
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+          <rect x="6" y="4" width="4" height="16" rx="1"/>
+          <rect x="14" y="4" width="4" height="16" rx="1"/>
+        </svg>
+      `;
+      pauseBtn.classList.add('is-recording');
+      pauseBtn.title = '暂停录音';
+      
+      // 添加录音状态样式，显示时间
+      ball.classList.add('recording');
+      
+      // 强制显示时间，隐藏图标
+      floatingBallTime.style.display = 'block';
+      document.querySelector('.ball-icon').style.display = 'none';
+      
+      // 开始计时
+      updateRecordingTime();
+      recordingTimer = setInterval(updateRecordingTime, 1000);
+      
+      // 通知主进程开始录音
+      ipcRenderer.send('start-recording-from-floating');
+      
+      console.log('开始录音，添加recording类:', ball.classList.contains('recording'));
+    }
+    
+    // 暂停录音
+    function pauseRecording() {
+      isRecording = false;
+      isPaused = true;
+      pauseStartTime = Date.now(); // 记录暂停开始时间
+      
+      // 更新UI - 暂停按钮变为继续图标
+      pauseBtn.innerHTML = `
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M8 5v14l11-7z"/>
+        </svg>
+      `;
+      pauseBtn.classList.remove('is-recording');
+      pauseBtn.title = '继续录音';
+      
+      // 停止计时
+      clearInterval(recordingTimer);
+      
+      // 确保面板保持显示
+      clearTimeout(panelHideTimer);
+      
+      // 通知主进程暂停录音
+      ipcRenderer.send('pause-recording-from-floating');
+      
+      // 切换到暂停状态样式
+      ball.classList.remove('recording');
+      ball.classList.add('paused');
+      
+      // 确保时间继续显示
+      floatingBallTime.style.display = 'block';
+      document.querySelector('.ball-icon').style.display = 'none';
+      
+      console.log('暂停录音，添加paused类:', ball.classList.contains('paused'));
+    }
+    
+    // 继续录音
+    function continueRecording() {
+      // 累计暂停时间
+      if (pauseStartTime > 0) {
+        pausedTime += Date.now() - pauseStartTime;
+        pauseStartTime = 0;
+      }
+      
+      isRecording = true;
+      isPaused = false;
+      
+      // 更新UI - 恢复暂停图标
+      pauseBtn.innerHTML = `
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+          <rect x="6" y="4" width="4" height="16" rx="1"/>
+          <rect x="14" y="4" width="4" height="16" rx="1"/>
+        </svg>
+      `;
+      pauseBtn.classList.add('is-recording');
+      pauseBtn.title = '暂停录音';
+      
+      // 继续计时
+      recordingTimer = setInterval(updateRecordingTime, 1000);
+      
+      // 确保面板保持显示
+      clearTimeout(panelHideTimer);
+      
+      // 通知主进程继续录音
+      ipcRenderer.send('continue-recording-from-floating');
+      
+      // 恢复录音状态样式
+      ball.classList.remove('paused');
+      ball.classList.add('recording');
+      
+      // 确保时间显示
+      floatingBallTime.style.display = 'block';
+      document.querySelector('.ball-icon').style.display = 'none';
+      
+      console.log('继续录音，添加recording类:', ball.classList.contains('recording'));
+    }
+    
+    // 停止录音
+    function stopRecording() {
+      isRecording = false;
+      isPaused = false;
+      
+      // 重置所有计时相关变量
+      recordingStartTime = 0;
+      pausedTime = 0;
+      pauseStartTime = 0;
+      
+      // 重置UI
+      pauseBtn.innerHTML = `
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M8 5v14l11-7z"/>
+        </svg>
+      `;
+      pauseBtn.classList.remove('is-recording');
+      pauseBtn.title = '开始录音';
+      floatingBallTime.textContent = '00:00:00';
+      
+      // 恢复悬浮球样式，显示图标
+      ball.classList.remove('recording', 'paused');
+      
+      // 恢复显示图标，隐藏时间
+      floatingBallTime.style.display = 'none';
+      document.querySelector('.ball-icon').style.display = 'flex';
+      
+      // 延迟隐藏面板
+      setTimeout(() => {
+        hideRecordingPanel();
+      }, 1000);
+      
+      // 停止计时
+      clearInterval(recordingTimer);
+      
+      // 通知主进程停止录音
+      ipcRenderer.send('stop-recording-from-floating');
+      
+      // 显示成功反馈
+      ball.classList.add('success-feedback');
+      setTimeout(() => ball.classList.remove('success-feedback'), 800);
+    }
+    
+    // 更新录音时间
+    function updateRecordingTime() {
+      // 计算实际录音时间 = 总时间 - 暂停时间
+      const totalTime = Date.now() - recordingStartTime;
+      const currentPausedTime = isPaused ? (Date.now() - pauseStartTime) : 0;
+      const elapsed = Math.floor((totalTime - pausedTime - currentPausedTime) / 1000);
+      
+      const hours = Math.floor(elapsed / 3600);
+      const minutes = Math.floor((elapsed % 3600) / 60);
+      const seconds = elapsed % 60;
+      
+      // 始终显示三位时间格式 HH:MM:SS
+      const timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+      
+      floatingBallTime.textContent = timeStr;
+      
+      // 调试信息
+      console.log('更新时间:', timeStr, '录音状态:', isRecording, '暂停状态:', isPaused, 'recording类:', ball.classList.contains('recording'));
+    }
+
+    // 双击切换窗口最小化/恢复状态
+    ball.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      console.log('Double clicked - toggle window minimize');
+      ipcRenderer.send('toggle-window-minimize');
+    });
+
+    // 防止拖拽时触发点击
+    ball.addEventListener('dragstart', (e) => {
+      e.preventDefault();
+    });
+
+    // 监听来自主进程的通知消息
+    ipcRenderer.on('show-notification', (event, message) => {
+      console.log('收到通知:', message);
+      showNotification(message);
+    });
+
+    // 显示通知
+    function showNotification(message) {
+      // 告诉主进程需要显示通知，让主进程处理窗口大小调整
+      ipcRenderer.send('show-floating-notification', message);
+    }
+
+    // 监听主进程发送的通知显示命令
+    ipcRenderer.on('display-notification', (event, message) => {
+      console.log('显示通知内容:', message);
+      displayNotificationContent(message);
+    });
+
+    // 实际显示通知内容
+    function displayNotificationContent(message) {
+      // 移除现有通知
+      const existingNotification = document.querySelector('.notification');
+      if (existingNotification) {
+        existingNotification.remove();
+      }
+
+      // 隐藏悬浮球
+      ball.style.display = 'none';
+
+      // 创建通知元素
+      const notification = document.createElement('div');
+      notification.className = 'notification';
+      
+      // 根据消息内容确定通知类型
+      if (message.includes('✅') || message.includes('成功') || message.includes('已复制')) {
+        notification.classList.add('success');
+      } else if (message.includes('❌') || message.includes('失败') || message.includes('错误')) {
+        notification.classList.add('error');
+      } else {
+        notification.classList.add('info');
+      }
+      
+      notification.textContent = message;
+      
+      // 添加到页面
+      ballContainer.appendChild(notification);
+      
+      // 3.5秒后移除通知并恢复悬浮球
+      setTimeout(() => {
+        if (notification.parentNode) {
+          notification.parentNode.removeChild(notification);
+        }
+        ball.style.display = 'flex';
+      }, 3500);
+    }
+
+    // 初始化屏幕位置检测
+    initScreenPositionDetection();
+    
+    // 清理事件监听器
+    window.addEventListener('beforeunload', () => {
+      // 移除所有 IPC 事件监听器
+      ipcRenderer.removeAllListeners('window-position-update');
+      ipcRenderer.removeAllListeners('show-notification');
+      ipcRenderer.removeAllListeners('display-notification');
+      ipcRenderer.removeAllListeners('recording-status-changed');
+    });
+  </script>
+</body>
+</html> 

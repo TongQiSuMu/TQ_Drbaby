@@ -1,0 +1,70 @@
+{
+  "name": "vue-electron-app",
+  "version": "1.0.0",
+  "description": "A Vue 2 + Element UI + Electron application",
+  "main": "src/main/index.js",
+  "scripts": {
+    "serve": "vue-cli-service serve",
+    "build": "vue-cli-service build",
+    "electron": "electron .",
+    "electron-dev": "concurrently \"npm run serve\" \"wait-on http://localhost:8080 && electron .\"",
+    "electron-build": "npm run build && electron-builder",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "keywords": [
+    "vue",
+    "electron",
+    "element-ui"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@babel/eslint-parser": "^7.28.0",
+    "@vue/cli-plugin-babel": "^5.0.8",
+    "@vue/cli-plugin-eslint": "^5.0.8",
+    "@vue/cli-service": "^5.0.8",
+    "concurrently": "^8.2.0",
+    "copy-webpack-plugin": "^13.0.0",
+    "electron": "^25.2.0",
+    "electron-builder": "^24.4.0",
+    "eslint-plugin-vue": "^10.3.0",
+    "html-webpack-plugin": "^5.6.3",
+    "less": "^4.3.0",
+    "less-loader": "^12.3.0",
+    "wait-on": "^7.0.1"
+  },
+    "dependencies": {
+    "annyang": "^2.6.1",
+    "axios": "^1.6.0",
+    "core-js": "^3.43.0",
+        "element-ui": "^2.15.13",
+    "vue": "^2.7.14",
+    "vue-router": "^3.6.5"
+  },
+  "build": {
+    "appId": "com.example.vue-electron-app",
+    "productName": "同启医语宝",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "dist/**/*",
+      "src/main/**/*",
+      "package.json",
+      "public/suspen-icon.png"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "public/suspen-icon.png"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "public/suspen-icon.png"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "public/suspen-icon.png"
+    }
+  }
+}

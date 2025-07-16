@@ -1,0 +1,95 @@
+# 依赖文件夹
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 构建输出目录
+dist/
+out/
+
+# 运行时文件
+*.log
+*.pid
+*.seed
+*.pid.lock
+
+# 缓存目录
+.npm
+.eslintcache
+.node_repl_history
+
+# 环境变量文件
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE 和编辑器文件
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 操作系统生成的文件
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Windows 特定文件
+desktop.ini
+
+# 临时文件
+*.tmp
+*.temp
+
+# Electron 特定文件
+/app/
+/release/
+*.dmg
+*.exe
+*.deb
+*.rpm
+*.snap
+
+# 测试覆盖率报告
+coverage/
+*.lcov
+
+# 备份文件
+*.bak
+*.backup
+
+# 压缩文件
+*.zip
+*.rar
+*.7z
+*.tar.gz
+
+# 用户特定配置
+.npmrc
+
+# Build and Release Folders (原有内容保留)
+bin-debug/
+bin-release/
+[Oo]bj/
+[Bb]in/
+
+# Other files and folders (原有内容保留)
+.settings/
+
+# Executables (原有内容保留)
+*.swf
+*.air
+*.ipa
+*.apk
+
+# Project files, i.e. `.project`, `.actionScriptProperties` and `.flexProperties`
+# should NOT be excluded as they contain compiler settings and other important
+# information for Eclipse / Flash Builder.
