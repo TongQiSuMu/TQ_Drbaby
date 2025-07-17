@@ -328,13 +328,13 @@ function createTransparentWindow() {
   
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
   
-  transparentWindow = new BrowserWindow({
+  // 根据操作系统选择合适的透明度实现
+  const windowConfig = {
     width: 360,
     height: 700,
     x: width - 820,
     y: 20,
     frame: false,
-    transparent: true,
     alwaysOnTop: true,
     resizable: true,
     movable: true,
@@ -342,6 +342,7 @@ function createTransparentWindow() {
     maximizable: false,
     show: false,
     skipTaskbar: true,
+    hasShadow: false, // 去掉阴影，避免透明度问题
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -350,7 +351,20 @@ function createTransparentWindow() {
       allowRunningInsecureContent: isDev ? true : false
     },
     title: '透明窗口'
-  });
+  };
+
+  // Windows 特殊处理
+  if (process.platform === 'win32') {
+    // 在 Windows 上使用 transparent
+    windowConfig.transparent = true;
+    windowConfig.backgroundColor = '#00000000'; // 完全透明
+  } else {
+    // macOS 使用 vibrancy
+    windowConfig.transparent = true;
+    windowConfig.vibrancy = 'under-window';
+  }
+
+  transparentWindow = new BrowserWindow(windowConfig);
   
   const loadTransparentWindow = () => {
     if (isDev) {
@@ -381,6 +395,7 @@ function createTransparentWindow() {
     transparentWindow.webContents.insertCSS(`
       body {
         -webkit-app-region: no-drag;
+        background: transparent !important;
       }
       .toggle-header {
         -webkit-app-region: drag;
@@ -389,6 +404,9 @@ function createTransparentWindow() {
         -webkit-app-region: no-drag;
       }
     `);
+    
+    // 禁用窗口的默认背景
+    transparentWindow.setBackgroundColor('#00000000');
   });
 
   // 添加边缘自动隐藏功能
@@ -1151,10 +1169,10 @@ ipcMain.on('recording-status-update', (event, status) => {
 ipcMain.on("update-transparent-window-opacity", (event, opacity) => {
   console.log("更新透明窗口透明度:", opacity);
   if (transparentWindow && !transparentWindow.isDestroyed()) {
-    // 使用系统级透明度，opacity 范围 0-100，需要转换为 0-1
+    // 使用 setOpacity 控制整个窗口的透明度
     const systemOpacity = opacity / 100;
     transparentWindow.setOpacity(systemOpacity);
-    console.log("透明度已设置为:", systemOpacity);
+    console.log("窗口透明度已设置为:", systemOpacity);
   }
 });
 
@@ -1162,6 +1180,21 @@ ipcMain.on("update-transparent-window-opacity", (event, opacity) => {
 ipcMain.on('sync-active-chat-to-transparent', (event, chatData) => {
   if (transparentWindow && !transparentWindow.isDestroyed()) {
     transparentWindow.webContents.send('active-chat-changed', chatData);
+  }
+  
+  // 同步生成状态到悬浮球
+  if (floatingBall && !floatingBall.isDestroyed() && chatData.medicalInfo) {
+    floatingBall.webContents.send('generation-status-changed', {
+      isGenerating: chatData.medicalInfo.isGenerating
+    });
+  }
+});
+
+// 透明窗口触发生成病历
+ipcMain.on('trigger-generate-record', () => {
+  console.log('透明窗口触发生成病历');
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('trigger-generate-record');
   }
 });
 

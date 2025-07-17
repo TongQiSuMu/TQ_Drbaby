@@ -1,9 +1,9 @@
 <template>
   <div class="transparent-window">
-    <!-- 背景层 - 只有这一层会变透明 -->
-    <div class="background-layer" :style="{ backgroundColor: windowBackgroundColor }"></div>
+    <!-- 背景层 - 使用纯色背景 -->
+    <div class="background-layer"></div>
     
-    <!-- 内容层 - 所有UI元素都在这一层，保持不透明 -->
+    <!-- 内容层 - 所有UI元素都在这一层 -->
     <div class="content-layer">
       <!-- 切换按钮区域 -->
     <div class="toggle-header">
@@ -219,12 +219,6 @@ export default {
     backgroundOpacity() {
       return this.currentOpacity / 100;
     },
-    windowBackgroundColor() {
-      const opacity = this.backgroundOpacity;
-      // 使用rgba设置窗口背景透明度
-      // 10%时几乎完全透明，100%时不透明
-      return `rgba(245, 245, 245, ${opacity})`;
-    },
   },
   async mounted() {
     this.isCopy = localStorage.getItem("isCopy") === "true";
@@ -246,11 +240,7 @@ export default {
       }
     }, 500);
     
-    // 恢复窗口完全不透明
-    if (window.require && ipcRenderer) {
-      console.log('恢复窗口完全不透明');
-      ipcRenderer.send("update-transparent-window-opacity", 100);
-    }
+    // 背景透明度已经通过数据绑定自动应用
   },
   
   methods: {
@@ -327,6 +317,19 @@ export default {
         this.$message.success(`录音结束，时长：${result.duration}秒`);
         this.chatManager.endRecordingSession();
         this.updateRecordingStatus({ isRecording: false, isPaused: false });
+        
+        // 自动切换到查看病历页面
+        this.activeView = 'info';
+        
+        // 设置生成中状态，显示加载动画
+        this.isGenerating = true;
+        this.generatedContent = "";
+        this.parsedResults = [];
+        
+        // 通知主窗口生成病历
+        if (window.require && ipcRenderer) {
+          ipcRenderer.send("trigger-generate-record");
+        }
       } catch (error) {
         this.handleError(error.message);
       }
@@ -425,10 +428,12 @@ export default {
     updateOpacity(event) {
       const opacity = parseInt(event.target.value);
       this.currentOpacity = opacity;
-      console.log('调节背景透明度:', opacity, '透明度值:', this.backgroundOpacity);
-      console.log('窗口背景颜色:', this.windowBackgroundColor);
+      console.log('调节窗口透明度:', opacity);
       
-      // 直接通过数据绑定更新背景透明度
+      // 发送到主进程更新窗口透明度
+      if (window.require && ipcRenderer) {
+        ipcRenderer.send("update-transparent-window-opacity", opacity);
+      }
       
       // 防抖：清除之前的定时器
       if (this.hideOpacityTimer) {
@@ -454,11 +459,14 @@ export default {
         console.log('加载保存的透明度:', this.currentOpacity);
         // 应用保存的透明度
         if (window.require && ipcRenderer) {
-          console.log('初始化时发送透明度:', this.currentOpacity);
           ipcRenderer.send("update-transparent-window-opacity", this.currentOpacity);
         }
       } else {
         console.log('没有保存的透明度设置，使用默认值:', this.currentOpacity);
+        // 应用默认透明度
+        if (window.require && ipcRenderer) {
+          ipcRenderer.send("update-transparent-window-opacity", this.currentOpacity);
+        }
       }
     },
     
@@ -561,10 +569,14 @@ export default {
 /* 确保HTML和body也是透明的 */
 html, body {
   background: transparent !important;
+  margin: 0;
+  padding: 0;
 }
 
 #app {
   background: transparent !important;
+  width: 100%;
+  height: 100%;
 }
 
 .transparent-window {
@@ -575,7 +587,7 @@ html, body {
   /* 移除背景设置 */
 }
 
-/* 背景层 - 只有这一层会变透明 */
+/* 背景层 - 使用纯色背景 */
 .background-layer {
   position: absolute;
   top: 0;
@@ -583,7 +595,7 @@ html, body {
   width: 100%;
   height: 100%;
   z-index: 0;
-  transition: background-color 0.3s ease;
+  background-color: #f5f5f5; /* 纯色背景 */
   pointer-events: none; /* 确保点击事件穿透到内容层 */
 }
 
@@ -606,7 +618,7 @@ html, body {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  /* 完全不透明的背景 */
+  /* 使用白色背景，确保内容清晰 */
   background: rgba(255, 255, 255, 1);
   border-bottom: 1px solid rgba(0, 0, 0, 0.1);
   -webkit-app-region: drag;
@@ -631,7 +643,7 @@ html, body {
   transition: all 0.3s ease;
   color: #333;
   font-weight: 600;
-  /* 完全不透明的按钮背景 */
+  /* 纯色按钮背景 */
   background: rgba(255, 255, 255, 1);
   border: 1px solid rgba(0, 0, 0, 0.1);
 }
@@ -670,7 +682,7 @@ html, body {
   align-items: center;
   justify-content: center;
   color: rgba(0, 0, 0, 0.8);
-  /* 完全不透明的按钮背景 */
+  /* 纯色按钮背景 */
   background: rgba(255, 255, 255, 1);
   transition: all 0.2s ease;
 }
@@ -810,7 +822,7 @@ html, body {
   font-size: 12px;
   color: #666;
   font-weight: 500;
-  /* 完全不透明的时间背景 */
+  /* 纯色时间背景 */
   background: rgba(240, 240, 240, 1);
   padding: 4px 8px;
   border-radius: 12px;
@@ -827,7 +839,7 @@ html, body {
 }
 
 .message-text {
-  /* 完全不透明的消息背景 */
+  /* 消息背景保持不透明，确保文字清晰 */
   background: rgba(64, 158, 255, 1);
   color: white;
   padding: 12px 16px;
@@ -883,7 +895,7 @@ html, body {
 /* 信息面板样式 */
 .info-content {
   flex: 1;
-  /* 完全不透明的信息面板背景 */
+  /* 纯色信息面板背景 */
   background: rgba(255, 255, 255, 1);
   border-radius: 12px;
   border: 1px solid rgba(0, 0, 0, 0.1);

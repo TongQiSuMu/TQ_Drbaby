@@ -549,6 +549,12 @@ export default {
         console.log('Main window received request to send current data to transparent');
         this.syncActiveChatToTransparent();
       });
+      
+      // 监听透明窗口触发的生成病历事件
+      ipcRenderer.on('trigger-generate-record', () => {
+        console.log('收到透明窗口生成病历请求');
+        this.generateRecord();
+      });
 
       // 监听来自悬浮框的录音控制事件
       ipcRenderer.on('floating-start-recording', () => {
@@ -1352,6 +1358,9 @@ export default {
 
       this.isGenerating = true;
       this.$message.info("正在生成病历，请稍候...");
+      
+      // 同步生成状态到透明窗口
+      this.syncActiveChatToTransparent();
 
       try {
         const currentChatData = this.chatList.find(
@@ -1377,12 +1386,17 @@ export default {
           }
           
           this.$message.success("病历生成完成！");
+          
+          // 同步生成完成的数据到透明窗口
+          this.syncActiveChatToTransparent();
         }
       } catch (error) {
         this.handleError("生成病历失败，请重试");
         console.error("生成病历错误:", error);
       } finally {
         this.isGenerating = false;
+        // 同步最终状态到透明窗口
+        this.syncActiveChatToTransparent();
       }
     },
 

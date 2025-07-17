@@ -21,7 +21,7 @@ module.exports = defineConfig({
     hot: true,
     proxy: {
       '/apiFlows': {
-        target: 'http://192.168.8.37:8000/',
+        target: 'http://192.168.8.37:8012',
         changeOrigin: true,
         pathRewrite: {
           '^/apiFlows': '' // 路径重写规则

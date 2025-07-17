@@ -284,6 +284,28 @@
     .floating-ball.recording {
       /* 保持原有样式，不改变背景色 */
     }
+    
+    /* 生成病历时的样式 */
+    .floating-ball.generating {
+      /* opacity: 0.7;
+      pointer-events: none;
+      filter: grayscale(50%) drop-shadow(0 6px 20px rgba(83, 137, 186, 0.3)); */
+    }
+    
+    .floating-ball.generating::before {
+      /* content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(45deg, 
+        transparent 30%, 
+        rgba(255, 255, 255, 0.3) 50%, 
+        transparent 70%);
+      border-radius: 50%;
+      animation: shimmer 1.5s ease-in-out infinite; */
+    }
 
     @keyframes fadeInUp {
       0% {
@@ -590,6 +612,7 @@
     // 录音状态
     let isRecording = false;
     let isPaused = false;
+    let isGenerating = false; // 病历生成状态
     let recordingStartTime = 0;
     let pausedTime = 0; // 累计暂停时间
     let pauseStartTime = 0; // 暂停开始时间
@@ -777,6 +800,15 @@
     
     // 录音控制按钮事件
     pauseBtn.addEventListener('click', () => {
+      // 如果正在生成病历，不允许操作
+      if (isGenerating) {
+        ipcRenderer.send('show-notification', {
+          type: 'warning',
+          message: '正在生成病历，请稍后再试'
+        });
+        return;
+      }
+      
       if (!isRecording && !isPaused) {
         // 如果还没开始录音，开始录音
         startRecording();
@@ -794,11 +826,21 @@
     });
     
     homeBtn.addEventListener('click', () => {
-      ipcRenderer.send('show-main-window');
+      ipcRenderer.send('create-transparent-window');
     });
     
     // 开始录音
     function startRecording() {
+      // 检查是否正在生成病历
+      if (isGenerating) {
+        // 发送通知消息
+        ipcRenderer.send('show-notification', {
+          type: 'warning',
+          message: '正在生成病历，请稍后再试'
+        });
+        return;
+      }
+      
       isRecording = true;
       isPaused = false;
       recordingStartTime = Date.now();
@@ -1045,6 +1087,32 @@
     // 初始化屏幕位置检测
     initScreenPositionDetection();
     
+    // 监听生成状态变化
+    ipcRenderer.on('generation-status-changed', (event, data) => {
+      console.log('收到生成状态变化:', data);
+      isGenerating = data.isGenerating;
+      
+      // 如果正在生成，更新UI状态
+      if (isGenerating) {
+        // 可以在这里添加视觉提示，比如改变悬浮球颜色或添加指示器
+        ball.classList.add('generating');
+        
+        // 禁用录音按钮
+        pauseBtn.disabled = true;
+        pauseBtn.style.opacity = '0.5';
+        pauseBtn.style.cursor = 'not-allowed';
+        pauseBtn.title = '正在生成病历，请稍后';
+      } else {
+        ball.classList.remove('generating');
+        
+        // 恢复录音按钮
+        pauseBtn.disabled = false;
+        pauseBtn.style.opacity = '1';
+        pauseBtn.style.cursor = 'pointer';
+        pauseBtn.title = '开始录音';
+      }
+    });
+    
     // 清理事件监听器
     window.addEventListener('beforeunload', () => {
       // 移除所有 IPC 事件监听器
@@ -1052,6 +1120,7 @@
       ipcRenderer.removeAllListeners('show-notification');
       ipcRenderer.removeAllListeners('display-notification');
       ipcRenderer.removeAllListeners('recording-status-changed');
+      ipcRenderer.removeAllListeners('generation-status-changed');
     });
   </script>
 </body>
