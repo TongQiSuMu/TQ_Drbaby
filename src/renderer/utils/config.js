@@ -2,6 +2,7 @@
 const config = {
   // API基础URL
   BASE_URL: 'http://192.168.8.16:8089', 
+  // BASE_URL: 'http://172.16.6.63:8089', 
   // BASE_URL: 'http://192.168.8.38:8089', 
   WSS_URL: 'wss://172.16.6.11:10096',
   // DIFT_URL: 'http://172.16.6.11',

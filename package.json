@@ -5,12 +5,15 @@
   "main": "src/main/index.js",
   "scripts": {
     "serve": "vue-cli-service serve",
-    "build": "vue-cli-service build",
+    "build:vue": "vue-cli-service build",
+    "dev": "concurrently \"npm run serve\" \"wait-on http://localhost:8080 && electron .\"",
     "electron": "electron .",
-    "electron-dev": "concurrently \"npm run serve\" \"wait-on http://localhost:8080 && electron .\"",
-    "electron-build": "npm run build && electron-builder",
-    "pack": "electron-builder --dir",
-    "dist": "electron-builder"
+    "build:win": "npm run build:vue && electron-builder --win",
+    "build:win:portable": "npm run build:vue && electron-builder --win portable",
+    "build:mac": "npm run build:vue && electron-builder --mac",
+    "build:linux": "npm run build:vue && electron-builder --linux",
+    "build": "npm run build:vue && electron-builder",
+    "pack": "npm run build:vue && electron-builder --dir"
   },
   "keywords": [
     "vue",
@@ -27,31 +30,34 @@
     "concurrently": "^8.2.0",
     "copy-webpack-plugin": "^13.0.0",
     "electron": "^25.2.0",
-    "electron-builder": "^24.4.0",
+    "electron-builder": "^24.13.3",
     "eslint-plugin-vue": "^10.3.0",
     "html-webpack-plugin": "^5.6.3",
     "less": "^4.3.0",
     "less-loader": "^12.3.0",
     "wait-on": "^7.0.1"
   },
-    "dependencies": {
+  "dependencies": {
     "annyang": "^2.6.1",
     "axios": "^1.6.0",
     "core-js": "^3.43.0",
-        "element-ui": "^2.15.13",
+    "element-ui": "^2.15.13",
     "vue": "^2.7.14",
     "vue-router": "^3.6.5"
   },
   "build": {
-    "appId": "com.example.vue-electron-app",
+    "appId": "com.example.app",
     "productName": "同启医语宝",
     "directories": {
-      "output": "dist"
+      "output": "release"
     },
     "files": [
       "dist/**/*",
       "src/main/**/*",
-      "package.json",
+      "!node_modules/.cache/**",
+      "!dist/win-unpacked/**",
+      "!**/dev-app-update.yml",
+      "!**/*.map",
       "public/suspen-icon.png"
     ],
     "mac": {
@@ -61,6 +67,20 @@
     "win": {
       "target": "nsis",
       "icon": "public/suspen-icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "同启医语宝",
+      "deleteAppDataOnUninstall": true,
+      "packElevateHelper": false
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.exe"
     },
     "linux": {
       "target": "AppImage",

@@ -1,5 +1,20 @@
 <template>
-  <div class="chat-container">
+  <div class="home-wrapper">
+    <!-- 自定义标题栏 -->
+    <div class="custom-titlebar">
+      <div class="titlebar-drag-region">
+        <span class="titlebar-title">同启医语宝</span>
+      </div>
+      <div class="titlebar-buttons">
+        <button class="titlebar-button minimize-button" @click="minimizeWindow" title="最小化">
+          <svg width="10" height="1" viewBox="0 0 10 1">
+            <rect width="10" height="1" fill="currentColor"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    
+    <div class="chat-container">
 
     <!-- 左侧对话列表 -->
     <div class="chat-sidebar" :class="{ collapsed: sidebarCollapsed }">
@@ -52,7 +67,7 @@
         >
           <div class="chat-info">
             <div class="chat-name">{{ chat.titleName }}</div>
-            <div class="chat-time">{{ chat.createTime }}</div>
+            <div class="chat-time">{{ chat.createOn.replace('T', ' ').substring(0, 16) }}</div>
           </div>
           <el-dropdown
             @command="handleChatCommand"
@@ -233,13 +248,13 @@
 
           <!-- 录音中：暂停 -->
           <div v-if="isRecording" class="simple-btn" @click="pauseRecording">
-            <i class="iconfont icon-jixu-copy" style="color: #eb964a"></i>
+            <i class="iconfont icon-zanting" style="color: #eb964a"></i>
             <span>暂停</span>
           </div>
 
           <!-- 暂停中：继续 -->
           <div v-if="isPaused" class="simple-btn" @click="continueRecording">
-            <i class="iconfont icon-zanting" style="color: #65d58e"></i>
+            <i class="iconfont icon-jixu-copy" style="color: #65d58e"></i>
             <span>继续录音</span>
           </div>
 
@@ -280,7 +295,7 @@
             type="primary"
             size="small"
             :loading="isGenerating"
-            :disabled="isRecording || isPaused"
+            :disabled="isRecording || isPaused" 
             @click="generateRecord"
           >
             {{ isGenerating ? "生成中..." : "生成病历" }}
@@ -307,13 +322,38 @@
           </div>
         </div>
         <div class="panel-content" v-if="!infoPanelCollapsed">
+          <!-- 深度思考按钮 -->
+          <div class="thinking-button-wrapper" v-if="thinkingContent">
+            <button 
+              @click="showThinkingProcess = !showThinkingProcess"
+              class="thinking-button"
+              :class="{ 'active': showThinkingProcess }"
+            >
+            <span>深度思考</span>
+            <i class="arrow-icon" :class="showThinkingProcess ? 'el-icon-arrow-up' : 'el-icon-arrow-down'"></i>
+            </button>
+          </div>
+          
+          <!-- 思考过程内容区域 -->
+          <transition name="fade-slide">
+            <div v-show="showThinkingProcess && thinkingContent" class="thinking-content-area">
+              <div class="thinking-content" ref="thinkingContent">
+                <div class="thinking-text">{{ thinkingContent }}</div>
+              </div>
+            </div>
+          </transition>
+          
           <!-- Loading state - 只在生成中且没有任何文字内容时显示 -->
-          <div v-if="isGenerating && !generatedContent" class="loading-container">
+          <div v-if="isGenerating && !generatedContent && !thinkingProcess" class="loading-container">
             <img :src="loadingImage" alt="生成中..." class="loading-gif" />
             <p>正在生成中，请稍候...</p>
           </div>
+           <!-- 有生成内容时显示原始内容 -->
+           <!-- <div v-if="generatedContent" class="raw-content">
+            {{ generatedContent }}
+          </div> -->
           <!-- 有解析结果时显示结构化内容 -->
-          <template v-else-if="parsedResults.length > 0">
+          <template v-if="parsedResults.length > 0">
             <div
               v-for="(item, index) in parsedResults"
               :key="index"
@@ -323,13 +363,10 @@
               <div class="record-content">{{ item.content }}</div>
             </div>
           </template>
-          <!-- 有生成内容时显示原始内容 -->
-          <div v-else-if="generatedContent" class="raw-content">
-            {{ generatedContent }}
-          </div>
+         
           <!-- 默认空状态 -->
           <div
-            v-else
+            v-if="!isGenerating && !generatedContent && !thinkingProcess && parsedResults.length === 0"
             class="empty-message"
           >
             完成录音后将生成相应内容
@@ -392,6 +429,7 @@
       </span>
     </el-dialog>
   </div>
+  </div>
 </template>
 
 <script>
@@ -427,6 +465,7 @@ export default {
       recognizedText: "",
       processedTextLength: 0,
       typingInterval: null, // 用于存储打字效果定时器
+      recordingStatusSyncTimer: null, // 用于定期同步录音状态到悬浮框
       
       // 聊天管理
       chatManager: null,
@@ -436,7 +475,12 @@ export default {
       generatedContent: "",
       parsedResults: [],
       shouldSaveRecording: null, // 控制是否保存录音的字段
-      isCopy: null
+      isCopy: null,
+      
+      // 思考过程相关
+      thinkingProcess: "", // 存储思考过程内容
+      showThinkingProcess: false, // 控制思考过程是否展开
+      streamingThinkingContent: "", // 存储流式的思考内容（从think标签提取）
     };
   },
   computed: {
@@ -491,6 +535,32 @@ export default {
         return new Date(a.createOn) - new Date(b.createOn);
       });
     },
+    // 提取思考过程中的 think 标签内容
+    thinkingContent() {
+      // 优先使用流式的思考内容
+      if (this.streamingThinkingContent) {
+        // 处理转义的换行符
+        return this.streamingThinkingContent.replace(/\\n/g, '\n');
+      }
+      
+      // 如果没有流式内容，则从generatedContent中提取
+      if (!this.generatedContent) return '';
+      
+      // 使用正则表达式提取 <think> 标签内的内容
+      const thinkRegex = /<think>([\s\S]*?)<\/think>/gi;
+      const matches = [];
+      let match;
+      
+      while ((match = thinkRegex.exec(this.generatedContent)) !== null) {
+        matches.push(match[1]);
+      }
+      
+      // 处理转义的换行符并返回所有 think 标签内容，用换行符连接
+      const processedMatches = matches.map(content => 
+        content.replace(/\\n/g, '\n')
+      );
+      return processedMatches.join('\n\n');
+    },
   },
   watch: {
     // 监听activeChat变化，同步到透明窗口
@@ -540,6 +610,10 @@ export default {
     
     await this.initializeChatManager();
     this.initializeSpeechRecognition();
+    
+    // 应用启动时自动创建一个新对话
+    console.log('应用启动，自动创建新对话');
+    await this.createNewChat();
     
     // 监听来自主进程的请求，向透明窗口发送当前数据
     if (window.require) {
@@ -603,18 +677,16 @@ export default {
               templateInfo: this.templateInfo,
               parsedResults: this.parsedResults, // 结构化的病历数据
               generatedContent: this.generatedContent,
-              isGenerating: this.isGenerating
+              isGenerating: this.isGenerating,
+              thinkingProcess: this.thinkingProcess, // 思考过程
+              showThinkingProcess: this.showThinkingProcess, // 是否展开思考过程
+              streamingThinkingContent: this.streamingThinkingContent // 流式思考内容
             }
           };
           
           // 发送到主进程，再转发给透明窗口
           ipcRenderer.send('sync-active-chat-to-transparent', chatData);
           
-          console.log('Synced chat data to transparent window:', {
-            chatMessagesCount: chatData.chatMessages.length,
-            parsedResultsCount: chatData.medicalInfo.parsedResults.length,
-            templateName: chatData.medicalInfo.templateInfo.templateName
-          });
         } catch (error) {
           console.error('Failed to sync chat data to transparent window:', error);
         }
@@ -688,15 +760,21 @@ export default {
       if (this.chatManager.chatList.length > 0) {
         try {
           const firstChat = this.chatManager.chatList[0];
-          const templatesContent = await this.chatManager.loadTemplatesContent(firstChat.voiceNumber);
-          this.parsedResults = templatesContent;
+          const templatesData = await this.chatManager.loadTemplatesContent(firstChat.voiceNumber);
+          this.parsedResults = templatesData.parsedResults;
+          this.streamingThinkingContent = templatesData.thinkingContent;
+          this.generatedContent = templatesData.fullContent;
         } catch (error) {
           console.error('加载初始模板内容失败:', error);
           this.parsedResults = [];
+          this.streamingThinkingContent = "";
+          this.generatedContent = "";
         }
       } else {
         this.parsedResults = [];
         this.generatedContent = "";
+        this.thinkingProcess = "";
+        this.streamingThinkingContent = "";
       }
       this.$forceUpdate();
     },
@@ -782,11 +860,14 @@ export default {
         // 先清除之前的数据
         this.parsedResults = [];
         this.generatedContent = "";
+        this.thinkingProcess = "";
         
         const result = await this.chatManager.selectChat(row);
         
         // 同步模板内容到Vue的响应式数据中
         this.parsedResults = result.templatesContent || [];
+        this.streamingThinkingContent = result.thinkingContent || "";
+        this.generatedContent = result.fullContent || "";
         
         // 同步选中的对话到透明窗口
         this.$nextTick(() => {
@@ -799,6 +880,7 @@ export default {
         // 错误时也要清除数据
         this.parsedResults = [];
         this.generatedContent = "";
+        this.thinkingProcess = "";
       }
     },
 
@@ -816,6 +898,7 @@ export default {
         // 先清除当前数据
         this.parsedResults = [];
         this.generatedContent = "";
+        this.thinkingProcess = "";
         
         const result = await this.chatManager.createNewChat();
         this.$message.success(result.message);
@@ -884,6 +967,34 @@ export default {
     // 处理错误
     handleError(error) {
       this.$message.error(error);
+      
+      // 如果是语音识别相关的错误，需要重置状态并通知悬浮窗
+      if (error && (
+        error.includes('语音识别') || 
+        error.includes('录音') ||
+        error.includes('连接失败')
+      )) {
+        // 重置录音状态
+        this.isRecording = false;
+        this.isPaused = false;
+        
+        // 更新录音状态到悬浮框
+        this.updateRecordingStatus({ isRecording: false, isPaused: false });
+        
+        // 通知悬浮窗显示错误并重置状态
+        if (window.require) {
+          const { ipcRenderer } = window.require("electron");
+          ipcRenderer.send('show-floating-notification', error);
+        }
+        
+        // 停止定时同步
+        this.stopRecordingStatusSync();
+        
+        // 结束错误的会话
+        if (this.chatManager) {
+          this.chatManager.endRecordingSession();
+        }
+      }
     },
 
     // 按照换行符分割消息内容
@@ -917,6 +1028,46 @@ export default {
       
       return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
     },
+    
+    // 发送录音状态更新到悬浮框 - 统一处理
+    updateRecordingStatus(status) {
+      // 获取当前录音时长
+      const currentState = this.speechRecognition?.getState() || {};
+      const statusWithDuration = {
+        ...status,
+        recordingDuration: currentState.recordingDuration || 0
+      };
+      console.log('[Home.vue] 发送录音状态更新:', statusWithDuration);
+      if (window.require) {
+        const { ipcRenderer } = window.require("electron");
+        ipcRenderer.send("recording-status-update", statusWithDuration);
+      }
+    },
+    
+    // 启动录音状态定时同步
+    startRecordingStatusSync() {
+      // 清理之前的定时器
+      this.stopRecordingStatusSync();
+      
+      // 每秒同步一次录音状态
+      this.recordingStatusSyncTimer = setInterval(() => {
+        if (this.isRecording || this.isPaused) {
+          const currentState = this.speechRecognition?.getState() || {};
+          this.updateRecordingStatus({ 
+            isRecording: currentState.isRecording || false, 
+            isPaused: currentState.isPaused || false 
+          });
+        }
+      }, 1000);
+    },
+    
+    // 停止录音状态定时同步
+    stopRecordingStatusSync() {
+      if (this.recordingStatusSyncTimer) {
+        clearInterval(this.recordingStatusSyncTimer);
+        this.recordingStatusSyncTimer = null;
+      }
+    },
 
     // ====================
     // 语音识别相关方法
@@ -928,8 +1079,22 @@ export default {
         this.chatManager.startRecordingSession();
         await this.speechRecognition.startRecording();
         this.$message.success("开始录音");
+        // 发送录音状态到悬浮框
+        this.updateRecordingStatus({ isRecording: true, isPaused: false });
+        
+        // 启动定时同步录音状态（每秒同步一次）
+        this.startRecordingStatusSync();
       } catch (error) {
         this.handleError(error.message);
+        // 录音失败时，重置状态
+        this.updateRecordingStatus({ isRecording: false, isPaused: false });
+        // 结束错误的会话
+        this.chatManager.endRecordingSession();
+        // 通知悬浮窗显示错误并重置状态
+        if (window.require) {
+          const { ipcRenderer } = window.require("electron");
+          ipcRenderer.send('show-floating-notification', `录音失败：${error.message || '未知错误'}`);
+        }
       }
     },
 
@@ -937,8 +1102,16 @@ export default {
       try {
         this.speechRecognition.pauseRecording();
         this.$message.info("录音已暂停");
+        // 发送录音状态到悬浮框
+        this.updateRecordingStatus({ isRecording: false, isPaused: true });
       } catch (error) {
         this.handleError(error.message);
+        // 暂停失败时，保持当前状态
+        const currentState = this.speechRecognition?.getState() || {};
+        this.updateRecordingStatus({ 
+          isRecording: currentState.isRecording || false, 
+          isPaused: currentState.isPaused || false 
+        });
       }
     },
 
@@ -946,8 +1119,12 @@ export default {
       try {
         this.speechRecognition.continueRecording();
         this.$message.success("继续录音");
+        // 发送录音状态到悬浮框
+        this.updateRecordingStatus({ isRecording: true, isPaused: false });
       } catch (error) {
         this.handleError(error.message);
+        // 继续录音失败时，保持暂停状态
+        this.updateRecordingStatus({ isRecording: false, isPaused: true });
       }
     },
 
@@ -955,6 +1132,10 @@ export default {
       try {
         const result = this.speechRecognition.stopRecording();
         this.$message.success(`录音结束，时长：${result.duration}秒`);
+        // 发送录音状态到悬浮框
+        this.updateRecordingStatus({ isRecording: false, isPaused: false });
+        // 停止定时同步
+        this.stopRecordingStatusSync();
         
         // 录音结束后，保存对话信息
         if (this.messages.length > 0) {
@@ -973,6 +1154,15 @@ export default {
         this.handleError(error.message);
         // 错误时也要结束会话
         this.chatManager.endRecordingSession();
+        // 停止录音失败时，重置状态
+        this.updateRecordingStatus({ isRecording: false, isPaused: false });
+        // 停止定时同步
+        this.stopRecordingStatusSync();
+        // 通知悬浮窗显示错误并重置状态
+        if (window.require) {
+          const { ipcRenderer } = window.require("electron");
+          ipcRenderer.send('show-floating-notification', `停止录音失败：${error.message || '未知错误'}`);
+        }
       }
     },
 
@@ -986,8 +1176,21 @@ export default {
         this.chatManager.startRecordingSession();
         await this.speechRecognition.startRecording();
         // 不显示消息提示，因为透明窗口已经显示了
+        // 发送录音状态到悬浮框
+        this.updateRecordingStatus({ isRecording: true, isPaused: false });
+        // 启动定时同步录音状态
+        this.startRecordingStatusSync();
       } catch (error) {
         this.handleError(error.message);
+        // 录音失败时，重置状态
+        this.updateRecordingStatus({ isRecording: false, isPaused: false });
+        // 结束错误的会话
+        this.chatManager.endRecordingSession();
+        // 通知悬浮窗显示错误并重置状态
+        if (window.require) {
+          const { ipcRenderer } = window.require("electron");
+          ipcRenderer.send('show-floating-notification', `录音失败：${error.message || '未知错误'}`);
+        }
       }
     },
 
@@ -995,8 +1198,16 @@ export default {
       try {
         this.speechRecognition.pauseRecording();
         // 不显示消息提示，因为透明窗口已经显示了
+        // 发送录音状态到悬浮框
+        this.updateRecordingStatus({ isRecording: false, isPaused: true });
       } catch (error) {
         this.handleError(error.message);
+        // 暂停失败时，保持当前状态
+        const currentState = this.speechRecognition?.getState() || {};
+        this.updateRecordingStatus({ 
+          isRecording: currentState.isRecording || false, 
+          isPaused: currentState.isPaused || false 
+        });
       }
     },
 
@@ -1004,8 +1215,12 @@ export default {
       try {
         this.speechRecognition.continueRecording();
         // 不显示消息提示，因为透明窗口已经显示了
+        // 发送录音状态到悬浮框
+        this.updateRecordingStatus({ isRecording: true, isPaused: false });
       } catch (error) {
         this.handleError(error.message);
+        // 继续录音失败时，保持暂停状态
+        this.updateRecordingStatus({ isRecording: false, isPaused: true });
       }
     },
 
@@ -1013,6 +1228,10 @@ export default {
       try {
         const result = this.speechRecognition.stopRecording();
         // 不显示消息提示，因为透明窗口已经显示了
+        // 发送录音状态到悬浮框
+        this.updateRecordingStatus({ isRecording: false, isPaused: false });
+        // 停止定时同步
+        this.stopRecordingStatusSync();
         
         // 录音结束后，保存对话信息
         if (this.messages.length > 0) {
@@ -1029,6 +1248,15 @@ export default {
         this.handleError(error.message);
         // 错误时也要结束会话
         this.chatManager.endRecordingSession();
+        // 停止录音失败时，重置状态
+        this.updateRecordingStatus({ isRecording: false, isPaused: false });
+        // 停止定时同步
+        this.stopRecordingStatusSync();
+        // 通知悬浮窗显示错误并重置状态
+        if (window.require) {
+          const { ipcRenderer } = window.require("electron");
+          ipcRenderer.send('show-floating-notification', `停止录音失败：${error.message || '未知错误'}`);
+        }
       }
     },
 
@@ -1052,6 +1280,25 @@ export default {
         this.$message.success("语音识别服务连接成功");
       } else if (connState === 2) {
         this.$message.error("语音识别服务连接失败");
+        
+        // 连接失败时重置录音状态
+        this.isRecording = false;
+        this.isPaused = false;
+        
+        // 更新录音状态到悬浮框
+        this.updateRecordingStatus({ isRecording: false, isPaused: false });
+        
+        // 通知悬浮窗显示错误并重置状态
+        if (window.require) {
+          const { ipcRenderer } = window.require("electron");
+          ipcRenderer.send('show-floating-notification', '语音识别服务连接失败');
+        }
+        
+        // 停止定时同步
+        this.stopRecordingStatusSync();
+        
+        // 结束错误的会话
+        this.chatManager.endRecordingSession();
       }
     },
 
@@ -1078,7 +1325,7 @@ export default {
         const path = window.require('path');
         
         // 创建录音文件夹路径
-        const recordingsDir = 'D:\\录音文件';
+        const recordingsDir = 'D:\\ck'
         
         // 检查文件夹是否存在，不存在则创建
         if (!fs.existsSync(recordingsDir)) {
@@ -1094,7 +1341,7 @@ export default {
           String(now.getHours()).padStart(2, '0') + 
           String(now.getMinutes()).padStart(2, '0') + 
           String(now.getSeconds()).padStart(2, '0');
-        
+        console.log(timestamp, 'xxc');
         const fileName = `录音_${timestamp}.wav`;
         const filePath = path.join(recordingsDir, fileName);
         
@@ -1186,15 +1433,78 @@ export default {
     updateGeneratedContent(content) {
       this.generatedContent = content;
       try {
-        this.parsedResults = this.chatManager.parseWorkflowResult(content);
+        // 移除所有 <think>...</think> 标签及其内容，只保留标签外的内容用于解析
+        const thinkRegex = /<think>[\s\S]*?<\/think>/gi;
+        let contentWithoutThink = content.replace(thinkRegex, '');
+        
+        // 同时移除不完整的 <think> 标签（没有结束标签的情况）
+        const incompleteThinkRegex = /<think>[\s\S]*$/gi;
+        contentWithoutThink = contentWithoutThink.replace(incompleteThinkRegex, '');
+        
+        // 清理多余的空行和空格
+        contentWithoutThink = contentWithoutThink.replace(/\n\s*\n\s*\n/g, '\n\n').trim();
+        
+        this.parsedResults = this.chatManager.parseWorkflowResult(contentWithoutThink);
       } catch (error) {
         this.parsedResults = [];
       }
     },
 
+    updateStreamingThinkingContent(content) {
+      // 查找所有 <think> 标签的开始位置
+      const thinkStartRegex = /<think>/gi;
+      const thinkEndRegex = /<\/think>/gi;
+      
+      let result = '';
+      let lastIndex = 0;
+      let thinkStartMatch;
+      
+      // 重置正则表达式
+      thinkStartRegex.lastIndex = 0;
+      thinkEndRegex.lastIndex = 0;
+      
+      // 查找所有 <think> 开始标签
+      while ((thinkStartMatch = thinkStartRegex.exec(content)) !== null) {
+        const startIndex = thinkStartMatch.index + 6; // <think> 的长度是6
+        
+        // 查找对应的结束标签
+        thinkEndRegex.lastIndex = startIndex;
+        const thinkEndMatch = thinkEndRegex.exec(content);
+        
+        if (thinkEndMatch) {
+          // 找到完整的 <think>...</think> 标签
+          const thinkContent = content.substring(startIndex, thinkEndMatch.index);
+          result += thinkContent + '\n\n';
+        } else {
+          // 没有找到结束标签，说明 <think> 标签还没有完整接收
+          // 提取从开始标签到内容末尾的所有内容
+          const partialThinkContent = content.substring(startIndex);
+          result += partialThinkContent;
+        }
+      }
+      
+      // 处理转义的换行符并更新流式思考内容
+      this.streamingThinkingContent = result.replace(/\\n/g, '\n').trim();
+      
+      // 如果有思考内容，自动展开思考过程
+      if (this.streamingThinkingContent && !this.showThinkingProcess) {
+        this.showThinkingProcess = true;
+      }
+      
+      // 自动滚动到底部
+      this.$nextTick(() => {
+        const thinkingContent = this.$refs.thinkingContent;
+        if (thinkingContent && this.showThinkingProcess) {
+          thinkingContent.scrollTop = thinkingContent.scrollHeight;
+        }
+      });
+    },
+
     clearResults() {
       this.generatedContent = "";
       this.parsedResults = [];
+      this.thinkingProcess = "";
+      this.streamingThinkingContent = "";
       this.$message.success("已清空生成结果");
     },
 
@@ -1241,6 +1551,9 @@ export default {
           localStorage.removeItem("userId");
           localStorage.removeItem("isCopy");
           localStorage.removeItem("isRecording");
+          localStorage.removeItem("templateSettings");
+          localStorage.removeItem("edgeHidingEnabled");
+          localStorage.removeItem("transparentWindowOpacity");
 
           // 跳转到登录页面
           this.$router.push("/login");
@@ -1314,6 +1627,8 @@ export default {
             // 删除后清除右侧面板数据，然后重新同步
             this.parsedResults = [];
             this.generatedContent = "";
+            this.thinkingProcess = "";
+            this.streamingThinkingContent = "";
             await this.syncDataFromChatManager();
           } catch (error) {
             this.handleError(error.message);
@@ -1357,6 +1672,10 @@ export default {
       }
 
       this.isGenerating = true;
+      this.thinkingProcess = ""; // 清空思考过程
+      this.generatedContent = ""; // 清空生成内容
+      this.streamingThinkingContent = ""; // 清空流式思考内容
+      this.showThinkingProcess = true; // 自动展开思考过程
       this.$message.info("正在生成病历，请稍候...");
       
       // 同步生成状态到透明窗口
@@ -1381,8 +1700,10 @@ export default {
           
           // 重新加载当前聊天的模板内容，确保右侧面板显示最新数据
           if (this.currentChat.voiceNumber) {
-            const templatesContent = await this.chatManager.loadTemplatesContent(this.currentChat.voiceNumber);
-            this.parsedResults = templatesContent || [];
+            const templatesData = await this.chatManager.loadTemplatesContent(this.currentChat.voiceNumber);
+            this.parsedResults = templatesData.parsedResults || [];
+            this.streamingThinkingContent = templatesData.thinkingContent || "";
+            this.generatedContent = templatesData.fullContent || "";
           }
           
           this.$message.success("病历生成完成！");
@@ -1392,7 +1713,6 @@ export default {
         }
       } catch (error) {
         this.handleError("生成病历失败，请重试");
-        console.error("生成病历错误:", error);
       } finally {
         this.isGenerating = false;
         // 同步最终状态到透明窗口
@@ -1401,18 +1721,20 @@ export default {
     },
 
     async callWorkflowAPI(currentChat) {
-      const res = await fetch(`${config.DIFT_URL}/api/generate`, {
+      const parse = '根据医生勾选的字段生成以下门诊病历引导Prompt：主诉客观记录患者原始症状描述，禁止添加主观分析或病因推测'
+      const res = await fetch(`${config.DIFT_URL}/api/generate-content`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-            voice_number: currentChat.voiceNumber || currentChat.id + "",
-            template_content: this.chatManager.templateInfo.templateContent || "",
+            // voice_number: currentChat.voiceNumber || currentChat.id + "",
+            // template_content: this.chatManager.templateInfo.templateContent || "",
             template_name: this.chatManager.templateInfo.templateName || "",
             dialogue_content: this.messages
               .map((message) => message.content || message.dialogueContent)
               .join("\n"),
+              prompt: this.chatManager.templateInfo.prompt || parse
         }),
       });
 
@@ -1453,14 +1775,42 @@ export default {
                 if (data.event === "text_chunk" && data.data?.text) {
                   generatedContent += data.data.text;
                   this.updateGeneratedContent(generatedContent);
+                  
+                  // 实时提取并更新思考内容
+                  this.updateStreamingThinkingContent(generatedContent);
+                }
+                
+                // 处理 agent_message 事件（思考过程）
+                if (data.event === "agent_message" && data.data?.answer) {
+                  this.thinkingProcess += data.data.answer;
+                  // 同步思考过程到透明窗口
+                  this.syncActiveChatToTransparent();
+                  // 自动滚动到底部
+                  this.$nextTick(() => {
+                    const thinkingContent = this.$refs.thinkingContent;
+                    if (thinkingContent && this.showThinkingProcess) {
+                      thinkingContent.scrollTop = thinkingContent.scrollHeight;
+                    }
+                  });
                 }
 
                 // 处理 workflow_finished 事件
                 if (data.event === "workflow_finished" && data.data?.outputs) {
                   const finalResult = data.data.outputs.result;
+                  this.showThinkingProcess = false;
+                  console.log('=== 接口返回完整内容 ===');
+                  console.log(generatedContent);
+                  console.log('=== 完整内容结束 ===');
                   if (finalResult) {
                     generatedContent = finalResult;
                     this.updateGeneratedContent(generatedContent);
+                    
+                    // 打印完整内容到控制台
+                    
+                    // 思考完成后自动收起思考过程
+                    setTimeout(() => {
+                      this.showThinkingProcess = false;
+                    }, 1000); // 延迟1秒后收起，让用户看到完成状态
                   }
                 }
               } catch (parseError) {
@@ -1498,6 +1848,9 @@ export default {
       clearInterval(this.typingInterval);
       this.typingInterval = null;
     }
+    
+    // 清理录音状态同步定时器
+    this.stopRecordingStatusSync();
   },
 };
 </script>
@@ -1527,6 +1880,165 @@ export default {
 .generating-content {
   width: 100%;
   height: 100%;
+}
+
+/* 思考过程样式 */
+/* 深度思考按钮容器 */
+.thinking-button-wrapper {
+  margin-bottom: 16px;
+  text-align: left;
+}
+
+/* 深度思考按钮样式 */
+.thinking-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background-color: #e8e8e8;
+  color: #333;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  outline: none;
+}
+
+.thinking-button:hover {
+  background-color: #d8d8d8;
+}
+
+.thinking-button.active {
+  background-color: #d0d0d0;
+}
+
+.thinking-button i {
+  font-size: 14px;
+}
+
+.thinking-button .el-icon-loading {
+  animation: rotating 2s linear infinite;
+}
+
+.thinking-button .arrow-icon {
+  margin-left: 4px;
+  font-size: 12px;
+  transition: transform 0.3s ease;
+}
+
+@keyframes rotating {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* 思考内容区域 */
+.thinking-content-area {
+  margin-bottom: 20px;
+  background-color: #f9f9f9;
+  border-radius: 8px;
+  overflow: hidden;
+  min-height: 100px;
+  flex-shrink: 0;
+}
+
+
+.thinking-content {
+  padding: 16px;
+  max-height: 400px;
+  min-height: 100px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.thinking-text {
+  margin: 0;
+  padding: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.8;
+  color: #333;
+  flex: 1;
+  min-height: 0;
+}
+
+/* 动画效果 */
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: all 0.3s ease;
+}
+
+.fade-slide-enter,
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+/* 滚动条样式 */
+.thinking-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.thinking-content::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.thinking-content::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+.thinking-content::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* 淡入动画 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 思考状态样式 */
+.thinking-status.thinking-active {
+  color: #409eff;
+  font-weight: 500;
+}
+
+/* 思考中的点动画 */
+.thinking-dots .dot {
+  display: inline-block;
+  animation: dotPulse 1.4s infinite ease-in-out both;
+}
+
+.thinking-dots .dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.thinking-dots .dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes dotPulse {
+  0%, 80%, 100% {
+    opacity: 0;
+  }
+  40% {
+    opacity: 1;
+  }
 }
 
 .generating-header {
@@ -2209,6 +2721,7 @@ export default {
   background-color: #fbfbfb;
   flex-direction: column;
   overflow-y: auto;
+  min-height: 0;
 }
 
 .empty-message {
@@ -2859,5 +3372,78 @@ export default {
 
 .info-toggle-btn .iconfont.rotated {
   transform: rotate(180deg);
+}
+
+/* 主容器样式 */
+.home-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* 自定义标题栏样式 */
+.custom-titlebar {
+  height: 32px;
+  background-color: #2c3e50;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.titlebar-drag-region {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  padding-left: 12px;
+  -webkit-app-region: drag;
+}
+
+.titlebar-title {
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.titlebar-buttons {
+  display: flex;
+  height: 100%;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-button {
+  width: 46px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.titlebar-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.titlebar-button:active {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.minimize-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* 调整聊天容器高度 */
+.chat-container {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  background-color: #ffffff;
 }
 </style>

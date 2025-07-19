@@ -50,7 +50,7 @@ const serviIntercept = () => {
   request.interceptors.response.use(
     res => {
       
-      if (res.data.code === 410) {
+      if (res.data.code === 401) {
         
         if (!ifNeedLogin) {
           ifNeedLogin = true;

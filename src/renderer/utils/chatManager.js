@@ -7,7 +7,8 @@ import {
   queryTemplatesContentByVoiceNumber,
   queryTemplateByIsDefault,
   updateTitleNameByVoiceNumber,
-  getTemplateById
+  getTemplateById,
+  queryTemplateContentById
 } from './apis/index';
 
 /**
@@ -45,7 +46,7 @@ export class ChatManager {
         
         // 如果有模板ID，获取模板内容
         if (this.templateInfo.templateId) {
-          await this.loadTemplateContent(this.templateInfo.templateId);
+          await this.loadTemplateContent(this.templateInfo.id);
         }
         
         return this.templateInfo;
@@ -61,7 +62,7 @@ export class ChatManager {
    */
   async loadTemplateContent(templateId) {
     try {
-      const response = await getTemplateById({ id: templateId });
+      const response = await queryTemplateContentById({ id: templateId });
       if (response.code === 200 && response.data) {
         this.templateInfo.templateContent = response.data;
         return response.data;
@@ -175,12 +176,44 @@ export class ChatManager {
       });
 
       if (response && response.code === 200 && response.data) {
-        return this.parseWorkflowResult(response.data);
+        // 提取 <think> 标签内容
+        const thinkRegex = /<think>([\s\S]*?)<\/think>/gi;
+        const thinkMatches = [];
+        let thinkMatch;
+        
+        while ((thinkMatch = thinkRegex.exec(response.data)) !== null) {
+          thinkMatches.push(thinkMatch[1]);
+        }
+        
+        // 处理转义的换行符，将 \n 转换为实际的换行符
+        const processedThinkingContent = thinkMatches.map(content => 
+          content.replace(/\\n/g, '\n')
+        ).join('\n\n');
+        
+        const thinkingContent = processedThinkingContent;
+        
+        // 移除所有 <think>...</think> 标签及其内容，只保留标签外的内容用于解析
+        const contentWithoutThink = response.data.replace(thinkRegex, '');
+        
+        // 同时移除不完整的 <think> 标签（没有结束标签的情况）
+        const incompleteThinkRegex = /<think>[\s\S]*$/gi;
+        const finalContent = contentWithoutThink.replace(incompleteThinkRegex, '');
+        
+        // 清理多余的空行和空格
+        const cleanedContent = finalContent.replace(/\n\s*\n\s*\n/g, '\n\n').trim();
+        
+        const parsedResults = this.parseWorkflowResult(cleanedContent);
+        
+        return {
+          parsedResults,
+          thinkingContent,
+          fullContent: response.data
+        };
       }
-      return [];
+      return { parsedResults: [], thinkingContent: '', fullContent: '' };
     } catch (error) {
       console.error('加载模板内容失败:', error);
-      return [];
+      return { parsedResults: [], thinkingContent: '', fullContent: '' };
     }
   }
 
@@ -192,11 +225,13 @@ export class ChatManager {
     this.currentChat = chat;
     
     const messages = await this.loadChatMessages(chat.voiceNumber, chat.id);
-    const templatesContent = await this.loadTemplatesContent(chat.voiceNumber);
+    const templatesData = await this.loadTemplatesContent(chat.voiceNumber);
     
     return {
       messages,
-      templatesContent
+      templatesContent: templatesData.parsedResults,
+      thinkingContent: templatesData.thinkingContent,
+      fullContent: templatesData.fullContent
     };
   }
 

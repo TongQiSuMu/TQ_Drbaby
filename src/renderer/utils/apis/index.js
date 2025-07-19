@@ -72,6 +72,14 @@ export function getTemplateById(params) {
   })
 }
 
+// export function queryTemplatesByUserId(params) {
+//   return request({
+//     url: '/voiceRecognition/sysUserTemplates/queryTemplatesByUserId',
+//     method: 'GET',
+//     params
+//   })
+// }
+
 // 根据就诊id查询对话记录
 export function queryDialogRecordsByVoiceNumber(params) {
   return request({
@@ -135,4 +143,24 @@ export function queryMedicalRecordContentInfoById(params) {
     params
   })
 }
+
+// 根据用户模板id查询模板内容
+export function queryTemplateContentById(params) {
+  return request({
+    url: '/voiceRecognition/sysUserTemplates/queryTemplateContentById',
+    method: 'GET',
+    params
+  })
+}
+
+
+// 保存提示词
+export function updateTemplatePrompt(params) {
+  return request({
+    url: '/voiceRecognition/sysUserTemplates/updateTemplatePrompt',
+    method: 'POST',
+    data:params
+  })
+}
+
 

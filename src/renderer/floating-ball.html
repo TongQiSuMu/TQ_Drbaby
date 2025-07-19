@@ -318,70 +318,7 @@
       }
     }
 
-    /* 通知样式 */
-    .notification {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: linear-gradient(135deg, rgba(76, 175, 80, 0.95), rgba(67, 160, 71, 0.95));
-      color: white;
-      padding: 12px 16px;
-      border-radius: 12px;
-      font-size: 13px;
-      font-family: 'Microsoft YaHei', sans-serif;
-      word-wrap: break-word;
-      z-index: 9999;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(76, 175, 80, 0.4);
-      animation: scaleIn 0.3s ease-out, fadeOut 0.3s ease-in 3s forwards;
-      pointer-events: none;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      line-height: 1.4;
-      backdrop-filter: blur(10px);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      overflow: hidden; /* 确保通知不会产生滚动条 */
-    }
-
-    .notification.success {
-      background: linear-gradient(135deg, rgba(76, 175, 80, 0.95), rgba(67, 160, 71, 0.95));
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(76, 175, 80, 0.4);
-    }
-
-    .notification.error {
-      background: linear-gradient(135deg, rgba(244, 67, 54, 0.95), rgba(229, 57, 53, 0.95));
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(244, 67, 54, 0.4);
-    }
-
-    .notification.info {
-      background: linear-gradient(135deg, rgba(33, 150, 243, 0.95), rgba(30, 136, 229, 0.95));
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(33, 150, 243, 0.4);
-    }
-
-    @keyframes scaleIn {
-      0% {
-        opacity: 0;
-        transform: scale(0.8);
-      }
-      100% {
-        opacity: 1;
-        transform: scale(1);
-      }
-    }
-
-    @keyframes fadeOut {
-      0% {
-        opacity: 1;
-        transform: scale(1);
-      }
-      100% {
-        opacity: 0;
-        transform: scale(0.9);
-      }
-    }
+    /* 通知样式已移除 */
 
     /* 录音控制面板样式 - 现代化设计 */
     .recording-panel {
@@ -648,6 +585,54 @@
       console.log('Screen position updated:', screenPosition, { position, screenWidth, windowCenterX });
     }
 
+    // 通用的重置录音状态函数
+    function resetRecordingState() {
+      console.log('[悬浮球] 执行重置录音状态');
+      
+      // 重置所有状态变量
+      isRecording = false;
+      isPaused = false;
+      recordingStartTime = 0;
+      pausedTime = 0;
+      pauseStartTime = 0;
+      
+      // 重置录音按钮
+      if (pauseBtn) {
+        pauseBtn.innerHTML = `
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+        `;
+        pauseBtn.classList.remove('is-recording');
+        pauseBtn.title = '开始录音';
+      }
+      
+      // 重置时间显示
+      if (floatingBallTime) {
+        floatingBallTime.textContent = '00:00:00';
+        floatingBallTime.style.display = 'none';
+      }
+      
+      // 恢复悬浮球样式
+      if (ball) {
+        ball.classList.remove('recording', 'paused');
+      }
+      
+      // 恢复图标显示
+      const ballIcon = document.querySelector('.ball-icon');
+      if (ballIcon) {
+        ballIcon.style.display = 'flex';
+      }
+      
+      // 停止计时
+      if (recordingTimer) {
+        clearInterval(recordingTimer);
+        recordingTimer = null;
+      }
+      
+      console.log('[悬浮球] 重置完成');
+    }
+
     // 鼠标按下事件 - 开始拖拽检测
     ball.addEventListener('mousedown', (e) => {
       e.preventDefault();
@@ -802,10 +787,7 @@
     pauseBtn.addEventListener('click', () => {
       // 如果正在生成病历，不允许操作
       if (isGenerating) {
-        ipcRenderer.send('show-notification', {
-          type: 'warning',
-          message: '正在生成病历，请稍后再试'
-        });
+        console.log('正在生成病历，暂时不能操作录音');
         return;
       }
       
@@ -833,167 +815,47 @@
     function startRecording() {
       // 检查是否正在生成病历
       if (isGenerating) {
-        // 发送通知消息
-        ipcRenderer.send('show-notification', {
-          type: 'warning',
-          message: '正在生成病历，请稍后再试'
-        });
+        console.log('正在生成病历，暂时不能开始录音');
         return;
       }
       
-      isRecording = true;
-      isPaused = false;
-      recordingStartTime = Date.now();
-      pausedTime = 0; // 重置累计暂停时间
-      pauseStartTime = 0; // 重置暂停开始时间
-      
-      // 显示录音面板
-      showRecordingPanel();
-      
-      // 更新UI - 播放按钮变为暂停图标
-      pauseBtn.innerHTML = `
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-          <rect x="6" y="4" width="4" height="16" rx="1"/>
-          <rect x="14" y="4" width="4" height="16" rx="1"/>
-        </svg>
-      `;
-      pauseBtn.classList.add('is-recording');
-      pauseBtn.title = '暂停录音';
-      
-      // 添加录音状态样式，显示时间
-      ball.classList.add('recording');
-      
-      // 强制显示时间，隐藏图标
-      floatingBallTime.style.display = 'block';
-      document.querySelector('.ball-icon').style.display = 'none';
-      
-      // 开始计时
-      updateRecordingTime();
-      recordingTimer = setInterval(updateRecordingTime, 1000);
-      
-      // 通知主进程开始录音
+      // 先确保透明窗口显示，然后开始录音
+      console.log('请求开始录音，确保透明窗口显示...');
+      ipcRenderer.send('ensure-transparent-window-visible');
       ipcRenderer.send('start-recording-from-floating');
       
-      console.log('开始录音，添加recording类:', ball.classList.contains('recording'));
+      // 显示录音面板但保持开始按钮状态
+      showRecordingPanel();
     }
     
     // 暂停录音
     function pauseRecording() {
-      isRecording = false;
-      isPaused = true;
-      pauseStartTime = Date.now(); // 记录暂停开始时间
-      
-      // 更新UI - 暂停按钮变为继续图标
-      pauseBtn.innerHTML = `
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M8 5v14l11-7z"/>
-        </svg>
-      `;
-      pauseBtn.classList.remove('is-recording');
-      pauseBtn.title = '继续录音';
-      
-      // 停止计时
-      clearInterval(recordingTimer);
+      // 通知主进程暂停录音，等待状态更新
+      console.log('请求暂停录音...');
+      ipcRenderer.send('ensure-transparent-window-visible');
+      ipcRenderer.send('pause-recording-from-floating');
       
       // 确保面板保持显示
       clearTimeout(panelHideTimer);
-      
-      // 通知主进程暂停录音
-      ipcRenderer.send('pause-recording-from-floating');
-      
-      // 切换到暂停状态样式
-      ball.classList.remove('recording');
-      ball.classList.add('paused');
-      
-      // 确保时间继续显示
-      floatingBallTime.style.display = 'block';
-      document.querySelector('.ball-icon').style.display = 'none';
-      
-      console.log('暂停录音，添加paused类:', ball.classList.contains('paused'));
     }
     
     // 继续录音
     function continueRecording() {
-      // 累计暂停时间
-      if (pauseStartTime > 0) {
-        pausedTime += Date.now() - pauseStartTime;
-        pauseStartTime = 0;
-      }
-      
-      isRecording = true;
-      isPaused = false;
-      
-      // 更新UI - 恢复暂停图标
-      pauseBtn.innerHTML = `
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-          <rect x="6" y="4" width="4" height="16" rx="1"/>
-          <rect x="14" y="4" width="4" height="16" rx="1"/>
-        </svg>
-      `;
-      pauseBtn.classList.add('is-recording');
-      pauseBtn.title = '暂停录音';
-      
-      // 继续计时
-      recordingTimer = setInterval(updateRecordingTime, 1000);
+      // 通知主进程继续录音，等待状态更新
+      console.log('请求继续录音...');
+      ipcRenderer.send('ensure-transparent-window-visible');
+      ipcRenderer.send('continue-recording-from-floating');
       
       // 确保面板保持显示
       clearTimeout(panelHideTimer);
-      
-      // 通知主进程继续录音
-      ipcRenderer.send('continue-recording-from-floating');
-      
-      // 恢复录音状态样式
-      ball.classList.remove('paused');
-      ball.classList.add('recording');
-      
-      // 确保时间显示
-      floatingBallTime.style.display = 'block';
-      document.querySelector('.ball-icon').style.display = 'none';
-      
-      console.log('继续录音，添加recording类:', ball.classList.contains('recording'));
     }
     
     // 停止录音
     function stopRecording() {
-      isRecording = false;
-      isPaused = false;
-      
-      // 重置所有计时相关变量
-      recordingStartTime = 0;
-      pausedTime = 0;
-      pauseStartTime = 0;
-      
-      // 重置UI
-      pauseBtn.innerHTML = `
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M8 5v14l11-7z"/>
-        </svg>
-      `;
-      pauseBtn.classList.remove('is-recording');
-      pauseBtn.title = '开始录音';
-      floatingBallTime.textContent = '00:00:00';
-      
-      // 恢复悬浮球样式，显示图标
-      ball.classList.remove('recording', 'paused');
-      
-      // 恢复显示图标，隐藏时间
-      floatingBallTime.style.display = 'none';
-      document.querySelector('.ball-icon').style.display = 'flex';
-      
-      // 延迟隐藏面板
-      setTimeout(() => {
-        hideRecordingPanel();
-      }, 1000);
-      
-      // 停止计时
-      clearInterval(recordingTimer);
-      
-      // 通知主进程停止录音
+      // 通知主进程停止录音，等待状态更新
+      console.log('请求停止录音...');
+      ipcRenderer.send('ensure-transparent-window-visible');
       ipcRenderer.send('stop-recording-from-floating');
-      
-      // 显示成功反馈
-      ball.classList.add('success-feedback');
-      setTimeout(() => ball.classList.remove('success-feedback'), 800);
     }
     
     // 更新录音时间
@@ -1031,58 +893,45 @@
     // 监听来自主进程的通知消息
     ipcRenderer.on('show-notification', (event, message) => {
       console.log('收到通知:', message);
-      showNotification(message);
+      // 不再显示通知，只处理错误状态
+      
+      // 如果是录音相关的错误消息，立即重置录音状态
+      if (message && (
+        message.includes('录音失败') || 
+        message.includes('录音错误') || 
+        message.includes('录音启动失败') ||
+        message.includes('语音识别服务连接失败') ||
+        message.includes('打开录音器失败') ||
+        message.includes('录音模块未正确加载') ||
+        message.includes('语音识别组件未初始化') ||
+        message.includes('初始化语音识别失败')
+      )) {
+        console.log('[悬浮球] 检测到录音错误，立即重置状态:', message);
+        
+        // 使用统一的重置函数
+        resetRecordingState();
+        
+        // 确保悬浮球样式正确
+        ensureFullDisplay();
+        
+        // 确保录音面板在错误后也能正确隐藏
+        setTimeout(() => {
+          hideRecordingPanel();
+        }, 1500);
+      }
     });
 
-    // 显示通知
+    // 显示通知 - 已禁用，不再显示通知
     function showNotification(message) {
-      // 告诉主进程需要显示通知，让主进程处理窗口大小调整
-      ipcRenderer.send('show-floating-notification', message);
+      // 不再显示通知
+      console.log('通知已禁用:', message);
     }
 
-    // 监听主进程发送的通知显示命令
+    // 监听主进程发送的通知显示命令 - 已禁用
     ipcRenderer.on('display-notification', (event, message) => {
-      console.log('显示通知内容:', message);
-      displayNotificationContent(message);
+      console.log('忽略通知显示命令:', message);
+      // 不再显示通知
     });
-
-    // 实际显示通知内容
-    function displayNotificationContent(message) {
-      // 移除现有通知
-      const existingNotification = document.querySelector('.notification');
-      if (existingNotification) {
-        existingNotification.remove();
-      }
-
-      // 隐藏悬浮球
-      ball.style.display = 'none';
-
-      // 创建通知元素
-      const notification = document.createElement('div');
-      notification.className = 'notification';
-      
-      // 根据消息内容确定通知类型
-      if (message.includes('✅') || message.includes('成功') || message.includes('已复制')) {
-        notification.classList.add('success');
-      } else if (message.includes('❌') || message.includes('失败') || message.includes('错误')) {
-        notification.classList.add('error');
-      } else {
-        notification.classList.add('info');
-      }
-      
-      notification.textContent = message;
-      
-      // 添加到页面
-      ballContainer.appendChild(notification);
-      
-      // 3.5秒后移除通知并恢复悬浮球
-      setTimeout(() => {
-        if (notification.parentNode) {
-          notification.parentNode.removeChild(notification);
-        }
-        ball.style.display = 'flex';
-      }, 3500);
-    }
 
     // 初始化屏幕位置检测
     initScreenPositionDetection();
@@ -1110,6 +959,105 @@
         pauseBtn.style.opacity = '1';
         pauseBtn.style.cursor = 'pointer';
         pauseBtn.title = '开始录音';
+      }
+    });
+    
+    // 监听来自主页面的录音状态变化
+    ipcRenderer.on('recording-status-changed', (event, status) => {
+      console.log('收到录音状态变化:', status);
+      
+      if (status.isRecording && !status.isPaused) {
+        // 开始录音或继续录音
+        console.log('[悬浮球] 录音状态，当前 isRecording:', isRecording, 'isPaused:', isPaused);
+        
+        if (!isRecording && !isPaused) {
+          // 全新开始录音
+          console.log('[悬浮球] 全新开始录音，已录音时长:', status.recordingDuration);
+          isRecording = true;
+          isPaused = false;
+          // 根据已录音时长计算开始时间
+          const duration = status.recordingDuration || 0;
+          recordingStartTime = Date.now() - (duration * 1000);
+          pausedTime = 0;
+          pauseStartTime = 0;
+        } else if (isPaused) {
+          // 从暂停状态恢复录音
+          console.log('[悬浮球] 从暂停状态恢复录音');
+          if (pauseStartTime > 0) {
+            pausedTime += Date.now() - pauseStartTime;
+            pauseStartTime = 0;
+          }
+          isRecording = true;
+          isPaused = false;
+        }
+        
+        // 显示录音面板
+        showRecordingPanel();
+        
+        // 更新UI
+        pauseBtn.innerHTML = `
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="6" y="4" width="4" height="16" rx="1"/>
+            <rect x="14" y="4" width="4" height="16" rx="1"/>
+          </svg>
+        `;
+        pauseBtn.classList.add('is-recording');
+        pauseBtn.title = '暂停录音';
+        
+        // 添加录音状态样式
+        ball.classList.remove('paused');
+        ball.classList.add('recording');
+        floatingBallTime.style.display = 'block';
+        document.querySelector('.ball-icon').style.display = 'none';
+        
+        // 开始计时
+        if (!recordingTimer) {
+          updateRecordingTime();
+          recordingTimer = setInterval(updateRecordingTime, 1000);
+        }
+      } else if (status.isPaused) {
+        // 暂停录音
+        console.log('[悬浮球] 暂停录音，已录音时长:', status.recordingDuration);
+        if (!isPaused) {
+          isRecording = false;
+          isPaused = true;
+          pauseStartTime = Date.now();
+          // 同步录音时长
+          if (status.recordingDuration !== undefined && recordingStartTime === 0) {
+            // 如果还没有设置开始时间，根据时长计算
+            const duration = status.recordingDuration || 0;
+            recordingStartTime = Date.now() - (duration * 1000);
+          }
+          
+          // 更新UI
+          pauseBtn.innerHTML = `
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M8 5v14l11-7z"/>
+            </svg>
+          `;
+          pauseBtn.classList.remove('is-recording');
+          pauseBtn.title = '继续录音';
+          
+          // 停止计时
+          clearInterval(recordingTimer);
+          
+          // 切换到暂停状态样式
+          ball.classList.remove('recording');
+          ball.classList.add('paused');
+          floatingBallTime.style.display = 'block';
+          document.querySelector('.ball-icon').style.display = 'none';
+        }
+      } else {
+        // 停止录音 - 无论当前状态如何，都要确保重置
+        console.log('[悬浮球] 收到停止录音状态，强制重置UI');
+        
+        // 使用统一的重置函数
+        resetRecordingState();
+        
+        // 延迟隐藏面板
+        setTimeout(() => {
+          hideRecordingPanel();
+        }, 1000);
       }
     });
     

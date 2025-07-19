@@ -2,6 +2,30 @@ const { app, BrowserWindow, screen, Menu, Tray, ipcMain, globalShortcut } = requ
 const path = require('path');
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
+// 设置为单实例应用
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  // 如果已经有实例在运行，退出新实例
+  app.quit();
+} else {
+  // 当第二个实例启动时，激活第一个实例的窗口
+  app.on('second-instance', (event, commandLine, workingDirectory) => {
+    // 如果主窗口存在，显示并聚焦
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    } else {
+      // 如果主窗口不存在，显示悬浮球
+      if (floatingBall && !floatingBall.isDestroyed()) {
+        floatingBall.show();
+        floatingBall.focus();
+      }
+    }
+  });
+}
+
 // 在开发环境中禁用安全警告
 if (isDev) {
   process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true';
@@ -32,7 +56,7 @@ function loadWindowContent(window, url, fallbackPath) {
     if (isDev) {
       window.loadURL(url).then(() => {
         if (isDev && window === mainWindow) {
-          window.webContents.openDevTools();
+          // window.webContents.openDevTools();
         }
         resolve();
       }).catch(err => {
@@ -57,7 +81,7 @@ function createWindow() {
       x: 20,
       y: 20,
       show: false,
-      frame: true,
+      frame: false,
       title: '同启医语宝',
       webPreferences: {
         nodeIntegration: true,
@@ -81,6 +105,7 @@ function createWindow() {
     
     loadWindowContent(mainWindow, url, fallbackPath).then(() => {
       console.log('Main window loaded successfully');
+      // 显示主窗口
       mainWindow.show();
     }).catch(err => {
       console.error('Failed to load main window:', err);
@@ -95,6 +120,17 @@ function createWindow() {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+  });
+  
+  // 监听主窗口的关闭事件
+  mainWindow.on('close', (event) => {
+    // 如果是从托盘退出，则不阻止关闭
+    if (app.isQuitting) {
+      return;
+    }
+    // 否则最小化到托盘
+    event.preventDefault();
+    mainWindow.hide();
   });
   
   mainWindow.setMenu(null);
@@ -130,7 +166,9 @@ function createFloatingBall() {
       
       loadWindowContent(floatingBall, url, fallbackPath).then(() => {
         console.log('Floating ball loaded successfully');
-        floatingBall.show();
+        setTimeout(() => {
+          floatingBall.show();
+        }, 500);
       }).catch(err => {
         console.error('Failed to load floating ball:', err);
         floatingBall = null;
@@ -281,6 +319,7 @@ function createTray() {
     {
       label: '退出应用',
       click: () => {
+        app.isQuitting = true;
         app.quit();
       }
     }
@@ -758,7 +797,7 @@ app.whenReady().then(async () => {
     } catch (error) {
       console.error('❌ Failed to create floating ball:', error);
     }
-  }, 5000);
+  }, 3000);
   
   // 延迟创建托盘
   setTimeout(() => {
@@ -802,6 +841,7 @@ ipcMain.on('hide-floating-ball', () => {
 });
 
 ipcMain.on('quit-app', () => {
+  app.isQuitting = true;
   app.quit();
 });
 
@@ -864,13 +904,8 @@ ipcMain.on('show-context-menu', (event) => {
     {
       label: '退出应用',
       click: () => {
+        app.isQuitting = true;
         app.quit();
-      }
-    },
-    {
-      label: '强制退出',
-      click: () => {
-        process.exit(0);
       }
     }
   ]);
@@ -886,6 +921,10 @@ ipcMain.on('login-success', () => {
     mainWindow.setSize(1200, 800);
     mainWindow.setResizable(true);
     mainWindow.setPosition(20, 20);
+    // 登录成功后隐藏主窗口
+    setTimeout(() => {
+      mainWindow.hide();
+    }, 500);
   }
   
   // 登录成功后创建透明窗口
@@ -915,43 +954,10 @@ ipcMain.on('user-logout', () => {
   }
 });
 
-// 处理悬浮框通知显示
+// 处理悬浮框通知显示 - 已禁用
 ipcMain.on('show-floating-notification', (event, message) => {
-  if (!floatingBall || floatingBall.isDestroyed()) return;
-  
-  console.log('显示悬浮框通知:', message);
-  
-  const messageLength = message.length;
-  const estimatedWidth = Math.min(Math.max(messageLength * 8 + 40, 200), 400);
-  const notificationHeight = 80;
-  
-  const [currentX, currentY] = floatingBall.getPosition();
-  const { width: screenWidth } = screen.getPrimaryDisplay().workAreaSize;
-  
-  let newX = currentX;
-  if (currentX + estimatedWidth > screenWidth) {
-    newX = screenWidth - estimatedWidth - 10;
-  }
-  
-  floatingBall.setBounds({
-    x: newX,
-    y: currentY,
-    width: estimatedWidth,
-    height: notificationHeight
-  });
-  
-  floatingBall.webContents.send('display-notification', message);
-  
-  setTimeout(() => {
-    if (floatingBall && !floatingBall.isDestroyed()) {
-      floatingBall.setBounds({
-        x: currentX,
-        y: currentY,
-        width: 60,
-        height: 60
-      });
-    }
-  }, 3500);
+  console.log('悬浮框通知已禁用:', message);
+  // 不再处理通知显示，避免改变窗口大小和位置
 });
 
 // 切换窗口最小化/恢复状态
@@ -1117,6 +1123,18 @@ ipcMain.on('adjust-floating-window-for-recording', (event, { show }) => {
   }
 });
 
+// 确保透明窗口显示
+ipcMain.on('ensure-transparent-window-visible', () => {
+  console.log('确保透明窗口显示');
+  if (transparentWindow && !transparentWindow.isDestroyed()) {
+    transparentWindow.show();
+    transparentWindow.focus();
+  } else {
+    console.log('透明窗口不存在，创建新的透明窗口');
+    createTransparentWindow();
+  }
+});
+
 // 处理悬浮球的录音控制
 ipcMain.on('start-recording-from-floating', () => {
   console.log('悬浮球开始录音，同步到所有窗口');
@@ -1160,8 +1178,12 @@ ipcMain.on('stop-recording-from-floating', () => {
 
 // 转发录音状态给悬浮球
 ipcMain.on('recording-status-update', (event, status) => {
+  console.log('主进程收到录音状态更新:', status);
   if (floatingBall && !floatingBall.isDestroyed()) {
+    console.log('转发录音状态到悬浮球');
     floatingBall.webContents.send('recording-status-changed', status);
+  } else {
+    console.log('悬浮球窗口不存在或已销毁');
   }
 });
 
@@ -1208,11 +1230,8 @@ ipcMain.on('request-current-chat-data', () => {
 
 // 当所有窗口都关闭时退出应用
 app.on('window-all-closed', () => {
-  // 保持悬浮球运行，不退出应用
-  if (!floatingBall || floatingBall.isDestroyed()) {
-    if (process.platform !== 'darwin') {
-      app.quit();
-    }
+  if (process.platform !== 'darwin') {
+    app.quit();
   }
 });
 
@@ -1220,6 +1239,14 @@ app.on('window-all-closed', () => {
 app.on('will-quit', () => {
   const { globalShortcut } = require('electron');
   globalShortcut.unregisterAll();
+});
+
+// 初始化退出标志
+app.isQuitting = false;
+
+// 处理应用退出前的事件
+app.on('before-quit', () => {
+  app.isQuitting = true;
 });
 
 app.on('activate', () => {

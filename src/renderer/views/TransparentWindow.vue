@@ -53,7 +53,7 @@
           class="opacity-slider"
           :value="currentOpacity"
           @input="updateOpacity"
-          min="10"
+          min="50"
           max="100"
           step="5"
         />
@@ -132,14 +132,26 @@
           <div class="panel-content">
             <!-- Loading state -->
             <div
-              v-if="isGenerating && !generatedContent"
+              v-if="isGenerating && !generatedContent && !thinkingContent"
               class="loading-container"
             >
               <img :src="loadingImage" alt="生成中..." class="loading-gif" />
               <p>正在生成中，请稍候...</p>
             </div>
+            
+            <!-- 思考过程显示区域 -->
+            <div v-if="thinkingContent" class="thinking-process-container">
+              <div class="thinking-header" @click="showThinkingProcess = !showThinkingProcess">
+                <span>深度思考</span>
+                <i :class="['el-icon-arrow-right', { 'expanded': showThinkingProcess }]"></i>
+              </div>
+              <div v-show="showThinkingProcess" class="thinking-content" ref="thinkingContent">
+                <pre>{{ thinkingContent }}</pre>
+              </div>
+            </div>
+            
             <!-- 有解析结果时显示结构化内容 -->
-            <template v-else-if="parsedResults.length > 0">
+            <template v-if="parsedResults.length > 0">
               <div
                 v-for="(item, index) in parsedResults"
                 :key="index"
@@ -156,12 +168,8 @@
                 <div class="record-content">{{ item.content }}</div>
               </div>
             </template>
-            <!-- 有生成内容时显示原始内容 -->
-            <div v-else-if="generatedContent" class="raw-content">
-              {{ generatedContent }}
-            </div>
             <!-- 默认空状态 -->
-            <div v-else class="empty-message">完成录音后将生成相应内容</div>
+            <div v-if="!isGenerating && !generatedContent && !thinkingContent && parsedResults.length === 0" class="empty-message">完成录音后将生成相应内容</div>
           </div>
         </div>
       </div>
@@ -197,6 +205,11 @@ export default {
       showOpacityPanel: false,
       currentOpacity: 80,
       hideOpacityTimer: null,
+      
+      // 思考过程相关
+      thinkingProcess: "",
+      showThinkingProcess: false,
+      streamingThinkingContent: "", // 存储流式的思考内容（从think标签提取）
     };
   },
   computed: {
@@ -219,6 +232,53 @@ export default {
     backgroundOpacity() {
       return this.currentOpacity / 100;
     },
+    // 提取思考过程中的 think 标签内容
+    thinkingContent() {
+      // 优先使用流式的思考内容
+      if (this.streamingThinkingContent) {
+        // 处理转义的换行符
+        return this.streamingThinkingContent.replace(/\\n/g, '\n');
+      }
+      
+      // 如果没有流式内容，则从generatedContent中提取
+      if (!this.generatedContent) return '';
+      
+      // 使用正则表达式提取 <think> 标签内的内容
+      const thinkRegex = /<think>([\s\S]*?)<\/think>/gi;
+      const matches = [];
+      let match;
+      
+      while ((match = thinkRegex.exec(this.generatedContent)) !== null) {
+        matches.push(match[1]);
+      }
+      
+      // 处理转义的换行符并返回所有 think 标签内容，用换行符连接
+      const processedMatches = matches.map(content => 
+        content.replace(/\\n/g, '\n')
+      );
+      return processedMatches.join('\n\n');
+    },
+  },
+  watch: {
+    // 监听思考内容变化，自动滚动到底部
+    thinkingContent: {
+      handler(newVal, oldVal) {
+        if (newVal && newVal !== oldVal && this.showThinkingProcess) {
+          this.$nextTick(() => {
+            this.scrollThinkingContentToBottom();
+          });
+        }
+      },
+      deep: true
+    },
+    // 监听思考过程显示状态变化
+    showThinkingProcess(newVal) {
+      if (newVal && this.thinkingContent) {
+        this.$nextTick(() => {
+          this.scrollThinkingContentToBottom();
+        });
+      }
+    }
   },
   async mounted() {
     this.isCopy = localStorage.getItem("isCopy") === "true";
@@ -361,6 +421,14 @@ export default {
         }
       });
     },
+    
+    // 滚动思考过程内容到底部
+    scrollThinkingContentToBottom() {
+      const thinkingContent = this.$refs.thinkingContent;
+      if (thinkingContent) {
+        thinkingContent.scrollTo({ top: thinkingContent.scrollHeight, behavior: "smooth" });
+      }
+    },
     splitMessageByNewline(content) {
       if (!content) return [];
       const segments = content.split("\n").filter((segment) => segment.trim());
@@ -388,6 +456,7 @@ export default {
     
     handleActiveChatChanged(chatData) {
       try {
+        console.log('[DEBUG TransparentWindow] 收到数据同步:', chatData);
         if (chatData.chatMessages) this.messages = chatData.chatMessages;
         if (chatData.recognizedText !== undefined)
           this.recognizedText = chatData.recognizedText;
@@ -395,11 +464,22 @@ export default {
           this.processedTextLength = chatData.processedTextLength;
         if (chatData.medicalInfo) {
           const mi = chatData.medicalInfo;
+          console.log('[DEBUG TransparentWindow] medicalInfo:', mi);
           if (mi.templateInfo) this.templateInfo = mi.templateInfo;
           if (mi.parsedResults) this.parsedResults = mi.parsedResults;
           if (mi.generatedContent !== undefined)
             this.generatedContent = mi.generatedContent;
           if (mi.isGenerating !== undefined) this.isGenerating = mi.isGenerating;
+          if (mi.thinkingProcess !== undefined) {
+            console.log('[DEBUG TransparentWindow] 收到思考过程:', mi.thinkingProcess);
+            this.thinkingProcess = mi.thinkingProcess;
+          }
+          if (mi.showThinkingProcess !== undefined) this.showThinkingProcess = mi.showThinkingProcess;
+          // 处理流式思考内容
+          if (mi.streamingThinkingContent !== undefined) {
+            console.log('[DEBUG TransparentWindow] 收到流式思考内容:', mi.streamingThinkingContent);
+            this.streamingThinkingContent = mi.streamingThinkingContent;
+          }
         }
         if (this.chatManager && chatData.activeChat) {
           this.chatManager.activeChat = chatData.activeChat;
@@ -939,6 +1019,69 @@ html, body {
   width: 60px;
   height: 60px;
   opacity: 0.8;
+}
+
+/* 思考过程样式 */
+.thinking-process-container {
+  margin-bottom: 20px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: rgba(249, 249, 249, 1);
+}
+
+.thinking-header {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  background-color: rgba(245, 245, 245, 1);
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.2s;
+}
+
+.thinking-header:hover {
+  background-color: rgba(235, 235, 235, 1);
+}
+
+.thinking-header i {
+  font-size: 12px;
+  margin-right: 8px;
+  transition: transform 0.2s;
+  color: #333;
+}
+
+.thinking-header i.expanded {
+  transform: rotate(90deg);
+}
+
+.thinking-header span {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+}
+
+.thinking-status {
+  margin-left: auto;
+  font-size: 12px;
+  color: #666;
+}
+
+.thinking-content {
+  padding: 16px;
+  background-color: rgba(255, 255, 255, 1);
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.thinking-content pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #444;
 }
 
 .record-item {
