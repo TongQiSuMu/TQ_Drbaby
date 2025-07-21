@@ -1131,11 +1131,12 @@ ipcMain.on('drag-window', (event, { mouseX, mouseY, offsetX, offsetY }) => {
     const newY = mouseY - offsetY;
     
     const { width, height } = screen.getPrimaryDisplay().workAreaSize;
-    const windowWidth = 400;
-    const windowHeight = 100;
+    const bounds = floatingBall.getBounds();
+    const windowWidth = bounds.width;
+    const windowHeight = bounds.height;
     
-    const clampedX = Math.max(0, Math.min(newX - 30, width - windowWidth));
-    const clampedY = Math.max(0, Math.min(newY - 20, height - windowHeight));
+    const clampedX = Math.max(0, Math.min(newX, width - windowWidth));
+    const clampedY = Math.max(0, Math.min(newY, height - windowHeight));
     
     floatingBall.setPosition(clampedX, clampedY);
   }
