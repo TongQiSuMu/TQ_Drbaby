@@ -914,7 +914,7 @@ export default {
       }
       
       // 检查当前对话是否有消息内容
-      if (this.chatManager.messages && this.chatManager.messages.length > 0) {
+      if (this.chatManager.messages && this.chatManager.messages.length > 1) {
         // 当前对话有内容，应该创建新对话
         return true;
       }

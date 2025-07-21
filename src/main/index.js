@@ -884,18 +884,18 @@ ipcMain.on('expand-floating-ball', (event, direction) => {
     const expandedHeight = 70;
     
     // 根据方向调整位置，确保展开后悬浮球位置不变
-    if (direction === 'left') {
-      // 向左展开，需要调整x坐标
+    if (direction === 'right') {
+      // 向右展开，x坐标不变，窗口向右扩展
       floatingBall.setBounds({
-        x: bounds.x - (expandedWidth - bounds.width),
+        x: bounds.x,
         y: bounds.y,
         width: expandedWidth,
         height: expandedHeight
       });
     } else {
-      // 向右展开，x坐标不变
+      // 向左展开，需要调整x坐标，窗口向左扩展
       floatingBall.setBounds({
-        x: bounds.x,
+        x: bounds.x - (expandedWidth - bounds.width),
         y: bounds.y,
         width: expandedWidth,
         height: expandedHeight

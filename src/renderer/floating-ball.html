@@ -760,17 +760,16 @@
     async function showRecordingPanel() {
       clearTimeout(panelHideTimer);
       
-      // 展开窗口
-      const expandDirection = screenPosition === 'left' ? 'right' : 'left';
-      ipcRenderer.send('expand-floating-ball', expandDirection);
-      
-      // 根据屏幕位置决定面板显示方向
-      recordingPanel.classList.remove('left', 'right');
+      // 根据屏幕位置决定展开方向和面板显示方向
       if (screenPosition === 'left') {
-        // 悬浮球在屏幕左边，面板显示在右边
+        // 悬浮球在屏幕左边，向右展开，面板显示在右边
+        ipcRenderer.send('expand-floating-ball', 'right');
+        recordingPanel.classList.remove('left', 'right');
         recordingPanel.classList.add('right');
       } else {
-        // 悬浮球在屏幕右边，面板显示在左边
+        // 悬浮球在屏幕右边，向左展开，面板显示在左边
+        ipcRenderer.send('expand-floating-ball', 'left');
+        recordingPanel.classList.remove('left', 'right');
         recordingPanel.classList.add('left');
       }
       
