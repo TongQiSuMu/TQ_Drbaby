@@ -759,6 +759,16 @@ app.whenReady().then(async () => {
     callback(true);
   });
   
+  // 启动医疗API服务
+  try {
+    console.log('Starting medical API server...');
+    const medicalAPI = require('../renderer/services/medical-api');
+    medicalAPI.startServer();
+    console.log('✅ Medical API server started successfully');
+  } catch (error) {
+    console.error('❌ Failed to start medical API server:', error);
+  }
+  
   // 创建主窗口
   try {
     console.log('Creating main window...');
@@ -1239,6 +1249,15 @@ app.on('window-all-closed', () => {
 app.on('will-quit', () => {
   const { globalShortcut } = require('electron');
   globalShortcut.unregisterAll();
+  
+  // 停止医疗API服务
+  try {
+    const medicalAPI = require('../renderer/services/medical-api');
+    medicalAPI.stopServer();
+    console.log('Medical API server stopped');
+  } catch (error) {
+    console.error('Error stopping medical API server:', error);
+  }
 });
 
 // 初始化退出标志
