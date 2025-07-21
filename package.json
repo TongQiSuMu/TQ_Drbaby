@@ -42,6 +42,7 @@
     "core-js": "^3.43.0",
     "cors": "^2.8.5",
     "electron": "^20.3.12",
+    "electron-updater": "^6.6.2",
     "element-ui": "^2.15.13",
     "express": "^5.1.0",
     "vue": "^2.7.14",
