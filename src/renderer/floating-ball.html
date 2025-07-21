@@ -58,7 +58,6 @@
       overflow: hidden; /* 确保容器不会产生滚动条 */
       -webkit-app-region: no-drag;
       padding-right: 10px;
-      pointer-events: none;
     }
 
     .floating-ball {
@@ -761,6 +760,10 @@
     async function showRecordingPanel() {
       clearTimeout(panelHideTimer);
       
+      // 展开窗口
+      const expandDirection = screenPosition === 'left' ? 'right' : 'left';
+      ipcRenderer.send('expand-floating-ball', expandDirection);
+      
       // 根据屏幕位置决定面板显示方向
       recordingPanel.classList.remove('left', 'right');
       if (screenPosition === 'left') {
@@ -777,6 +780,8 @@
     // 隐藏录音面板
     function hideRecordingPanel() {
       recordingPanel.classList.remove('show');
+      // 收缩窗口
+      ipcRenderer.send('collapse-floating-ball');
     }
     
     // 开始隐藏计时器

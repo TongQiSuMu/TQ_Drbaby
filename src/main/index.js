@@ -60,7 +60,7 @@ function loadWindowContent(window, url, fallbackPath) {
     if (isDev) {
       window.loadURL(url).then(() => {
         if (isDev && window === mainWindow) {
-          // window.webContents.openDevTools();
+          window.webContents.openDevTools();
         }
         resolve();
       }).catch(err => {
@@ -157,9 +157,9 @@ function createFloatingBall() {
     const { width, height } = screen.getPrimaryDisplay().workAreaSize;
     
     floatingBall = new BrowserWindow({
-      width: 250,
-      height: 80,
-      x: width - 250,
+      width: 80,
+      height: 70,
+      x: width - 90,
       y: 100,
       frame: false,
       alwaysOnTop: true,
@@ -174,7 +174,7 @@ function createFloatingBall() {
         webSecurity: isDev ? false : true
       }
     });
-    mainWindow.setIgnoreMouseEvents(true, { forward: true });
+
     const loadFloatingBall = () => {
       const url = 'http://localhost:8080/floating-ball.html';
       const fallbackPath = path.join(__dirname, '../../dist/floating-ball.html');
@@ -873,6 +873,65 @@ ipcMain.on('show-floating-ball', () => {
 ipcMain.on('hide-floating-ball', () => {
   if (floatingBall && !floatingBall.isDestroyed()) {
     floatingBall.hide();
+  }
+});
+
+// 动态调整悬浮球窗口大小
+ipcMain.on('expand-floating-ball', (event, direction) => {
+  if (floatingBall && !floatingBall.isDestroyed()) {
+    const bounds = floatingBall.getBounds();
+    const expandedWidth = 250;
+    const expandedHeight = 70;
+    
+    // 根据方向调整位置，确保展开后悬浮球位置不变
+    if (direction === 'left') {
+      // 向左展开，需要调整x坐标
+      floatingBall.setBounds({
+        x: bounds.x - (expandedWidth - bounds.width),
+        y: bounds.y,
+        width: expandedWidth,
+        height: expandedHeight
+      });
+    } else {
+      // 向右展开，x坐标不变
+      floatingBall.setBounds({
+        x: bounds.x,
+        y: bounds.y,
+        width: expandedWidth,
+        height: expandedHeight
+      });
+    }
+  }
+});
+
+ipcMain.on('collapse-floating-ball', () => {
+  if (floatingBall && !floatingBall.isDestroyed()) {
+    const bounds = floatingBall.getBounds();
+    const collapsedWidth = 80;
+    const collapsedHeight = 70;
+    const { width: screenWidth } = screen.getPrimaryDisplay().workAreaSize;
+    
+    // 判断当前是向左还是向右展开的
+    const centerX = bounds.x + bounds.width / 2;
+    const isLeftExpanded = centerX > screenWidth / 2;
+    
+    if (isLeftExpanded) {
+      // 如果是向左展开的，收缩时需要调整x坐标
+      floatingBall.setBounds({
+        x: bounds.x + (bounds.width - collapsedWidth),
+        y: bounds.y,
+        width: collapsedWidth,
+        height: collapsedHeight
+      });
+    } else {
+      // 向右展开的，x坐标不变
+      floatingBall.setBounds({
+        x: bounds.x,
+        y: bounds.y,
+        width: collapsedWidth,
+        height: collapsedHeight
+      });
+    }
   }
 });
 
