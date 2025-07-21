@@ -58,6 +58,7 @@
       overflow: hidden; /* 确保容器不会产生滚动条 */
       -webkit-app-region: no-drag;
       padding-right: 10px;
+      pointer-events: none;
     }
 
     .floating-ball {
@@ -83,6 +84,7 @@
       min-height: 60px; /* 确保最小高度 */
       max-width: 60px; /* 确保最大宽度 */
       max-height: 60px; /* 确保最大高度 */
+      pointer-events: auto;
     }
 
     /* 悬浮球内部光泽效果 */
@@ -346,6 +348,7 @@
       overflow: hidden; /* 确保面板不会产生滚动条 */
       flex-shrink: 0; /* 防止缩放 */
       white-space: nowrap; /* 防止内容换行 */
+      pointer-events: auto;
     }
     
     .recording-panel.left {

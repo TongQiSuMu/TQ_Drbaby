@@ -50,6 +50,10 @@ ipcMain.handle('get-local-ip', () => {
   return '127.0.0.1'
 })
 
+// 防止部分老显卡崩溃
+// app.disableHardwareAcceleration(); // 注释掉以支持透明窗口
+app.commandLine.appendSwitch('no-sandbox');
+
 // 通用窗口加载函数
 function loadWindowContent(window, url, fallbackPath) {
   return new Promise((resolve, reject) => {
@@ -83,6 +87,9 @@ function createWindow() {
       show: false,
       frame: false,
       title: '同启医语宝',
+      minimizable: true,  // 确保窗口可以最小化
+      skipTaskbar: false, // 确保在任务栏显示
+      paintWhenInitiallyHidden: true, // 初始隐藏时也渲染
       webPreferences: {
         nodeIntegration: true,
         contextIsolation: false,
@@ -105,8 +112,15 @@ function createWindow() {
     
     loadWindowContent(mainWindow, url, fallbackPath).then(() => {
       console.log('Main window loaded successfully');
-      // 显示主窗口
-      mainWindow.show();
+      // 检查是否是手动显示窗口
+      if (global.isManualShow) {
+        mainWindow.show();
+        console.log('Manual show - window displayed normally');
+      } else {
+        // 自动启动时，只显示窗口，让渲染进程决定何时最小化
+        console.log('Auto startup - showing window...');
+        mainWindow.show();
+      }
     }).catch(err => {
       console.error('Failed to load main window:', err);
     });
@@ -128,9 +142,10 @@ function createWindow() {
     if (app.isQuitting) {
       return;
     }
-    // 否则最小化到托盘
+    // 否则最小化到任务栏
     event.preventDefault();
-    mainWindow.hide();
+    mainWindow.minimize();
+    console.log('Main window minimized on close event');
   });
   
   mainWindow.setMenu(null);
@@ -159,7 +174,7 @@ function createFloatingBall() {
         webSecurity: isDev ? false : true
       }
     });
-
+    mainWindow.setIgnoreMouseEvents(true, { forward: true });
     const loadFloatingBall = () => {
       const url = 'http://localhost:8080/floating-ball.html';
       const fallbackPath = path.join(__dirname, '../../dist/floating-ball.html');
@@ -346,11 +361,22 @@ function createTray() {
 // 显示主窗口
 function showMainWindow() {
   if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore();
+    }
     mainWindow.show();
     mainWindow.focus();
   } else {
+    // 创建新窗口时设置标志，避免自动最小化
+    global.isManualShow = true;
     createWindow();
-    mainWindow.show();
+    setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+      global.isManualShow = false;
+    }, 100);
   }
 }
 
@@ -382,12 +408,15 @@ function createTransparentWindow() {
     show: false,
     skipTaskbar: true,
     hasShadow: false, // 去掉阴影，避免透明度问题
+    backgroundThrottling: false, // 防止背景节流
+    paintWhenInitiallyHidden: true, // 初始隐藏时也渲染
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
-      enableRemoteModule: true,
+      // enableRemoteModule: true, // Electron 20 中已废弃
       webSecurity: isDev ? false : true,
-      allowRunningInsecureContent: isDev ? true : false
+      allowRunningInsecureContent: isDev ? true : false,
+      webviewTag: true // 如果需要使用 webview
     },
     title: '透明窗口'
   };
@@ -405,11 +434,18 @@ function createTransparentWindow() {
 
   transparentWindow = new BrowserWindow(windowConfig);
   
+  // 使用 ready-to-show 事件来确保透明度正确初始化
+  transparentWindow.once('ready-to-show', () => {
+    setTimeout(() => {
+      transparentWindow.show();
+      transparentWindow.focus();
+      console.log('Transparent window shown after transparency initialization');
+    }, 100); // 短暂延迟确保透明度完全初始化
+  });
+
   const loadTransparentWindow = () => {
     if (isDev) {
       transparentWindow.loadURL('http://localhost:8080/#/transparent').then(() => {
-        transparentWindow.show();
-        transparentWindow.focus();
         console.log('Transparent window loaded successfully');
       }).catch(err => {
         console.log('Transparent window load error:', err);
@@ -417,13 +453,13 @@ function createTransparentWindow() {
     } else {
       const indexPath = path.join(__dirname, '../../dist/index.html');
       transparentWindow.loadFile(indexPath, { hash: '#/transparent' }).then(() => {
-        transparentWindow.show();
-        transparentWindow.focus();
+        console.log('Transparent window loaded from file');
       });
     }
   };
 
-  setTimeout(loadTransparentWindow, 1000);
+  // 立即加载窗口内容，show 事件会在 ready-to-show 时触发
+  loadTransparentWindow();
 
   transparentWindow.on('closed', () => {
     transparentWindow = null;
@@ -759,16 +795,6 @@ app.whenReady().then(async () => {
     callback(true);
   });
   
-  // 启动医疗API服务
-  try {
-    console.log('Starting medical API server...');
-    const medicalAPI = require('../renderer/services/medical-api');
-    medicalAPI.startServer();
-    console.log('✅ Medical API server started successfully');
-  } catch (error) {
-    console.error('❌ Failed to start medical API server:', error);
-  }
-  
   // 创建主窗口
   try {
     console.log('Creating main window...');
@@ -862,8 +888,17 @@ ipcMain.on('force-quit', () => {
 
 // 窗口控制事件
 ipcMain.on('minimize-window', () => {
+  console.log('Minimize window event received');
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.minimize();
+    try {
+      // 对于无边框窗口，确保最小化能正常工作
+      mainWindow.minimize();
+      console.log('Window minimized successfully');
+    } catch (error) {
+      console.error('Failed to minimize window:', error);
+      // 如果最小化失败，尝试隐藏窗口
+      mainWindow.hide();
+    }
   }
 });
 
@@ -931,9 +966,12 @@ ipcMain.on('login-success', () => {
     mainWindow.setSize(1200, 800);
     mainWindow.setResizable(true);
     mainWindow.setPosition(20, 20);
-    // 登录成功后隐藏主窗口
+    // 登录成功后最小化主窗口到任务栏
     setTimeout(() => {
-      mainWindow.hide();
+      if (!mainWindow.isMinimized()) {
+        mainWindow.minimize();
+        console.log('Main window minimized after login success');
+      }
     }, 500);
   }
   
@@ -1202,6 +1240,8 @@ ipcMain.on("update-transparent-window-opacity", (event, opacity) => {
   console.log("更新透明窗口透明度:", opacity);
   if (transparentWindow && !transparentWindow.isDestroyed()) {
     // 使用 setOpacity 控制整个窗口的透明度
+    // 注意：在 Electron 20+ 中，setOpacity 可能与 transparent: true 产生冲突
+    // 如果透明度控制不正常，可以考虑通过 CSS 控制内容透明度而非窗口透明度
     const systemOpacity = opacity / 100;
     transparentWindow.setOpacity(systemOpacity);
     console.log("窗口透明度已设置为:", systemOpacity);
@@ -1249,15 +1289,6 @@ app.on('window-all-closed', () => {
 app.on('will-quit', () => {
   const { globalShortcut } = require('electron');
   globalShortcut.unregisterAll();
-  
-  // 停止医疗API服务
-  try {
-    const medicalAPI = require('../renderer/services/medical-api');
-    medicalAPI.stopServer();
-    console.log('Medical API server stopped');
-  } catch (error) {
-    console.error('Error stopping medical API server:', error);
-  }
 });
 
 // 初始化退出标志

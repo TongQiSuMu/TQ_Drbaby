@@ -611,9 +611,15 @@ export default {
     await this.initializeChatManager();
     this.initializeSpeechRecognition();
     
-    // 应用启动时自动创建一个新对话
-    console.log('应用启动，自动创建新对话');
-    await this.createNewChat();
+    // 应用启动时检查是否需要创建新对话
+    // 只有当上一次对话有内容时才创建新对话
+    const shouldCreateNewChat = this.checkIfShouldCreateNewChat();
+    if (shouldCreateNewChat) {
+      console.log('上一次对话有内容，自动创建新对话');
+      await this.createNewChat();
+    } else {
+      console.log('上一次对话为空，继续使用当前对话');
+    }
     
     // 监听来自主进程的请求，向透明窗口发送当前数据
     if (window.require) {
@@ -629,6 +635,17 @@ export default {
         console.log('收到透明窗口生成病历请求');
         this.generateRecord();
       });
+      
+      // 自动最小化主窗口（仅在首次启动时）
+      const isFirstLaunch = !sessionStorage.getItem('hasLaunched');
+      if (isFirstLaunch) {
+        sessionStorage.setItem('hasLaunched', 'true');
+        console.log('First launch detected, auto-minimizing window...');
+        setTimeout(() => {
+          console.log('Triggering minimize from renderer process...');
+          ipcRenderer.send('minimize-window');
+        }, 2000); // 给页面一些时间完全加载
+      }
 
       // 监听来自悬浮框的录音控制事件
       ipcRenderer.on('floating-start-recording', () => {
@@ -882,6 +899,28 @@ export default {
         this.generatedContent = "";
         this.thinkingProcess = "";
       }
+    },
+
+    checkIfShouldCreateNewChat() {
+      // 检查是否应该创建新对话
+      // 规则：
+      // 1. 如果没有任何对话，则创建新对话
+      // 2. 如果有对话，检查当前对话是否有内容
+      // 3. 只有当前对话有内容时才创建新对话
+      
+      if (!this.chatManager || !this.chatManager.chatList || this.chatManager.chatList.length === 0) {
+        // 没有任何对话，需要创建
+        return true;
+      }
+      
+      // 检查当前对话是否有消息内容
+      if (this.chatManager.messages && this.chatManager.messages.length > 0) {
+        // 当前对话有内容，应该创建新对话
+        return true;
+      }
+      
+      // 当前对话为空，不需要创建新对话
+      return false;
     },
 
     async createNewChat() {
